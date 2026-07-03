@@ -3871,13 +3871,13 @@ window.addEventListener('DOMContentLoaded', async function(){
       // per dag: wie is vrij (ochtend/middag/hele dag) + aantal aanwezig per dagdeel
       var offInfo = [], amP = [], pmP = [];
       keys.forEach(function(k){
-        var am=[], pm=[], full=[], ap=0, pp=0;
+        var am=[], pm=[], full=[], present=[], ap=0, pp=0;
         RC_BEZ_NAMES.forEach(function(n){
           var a = rcOnLeave(n,k,'am'), p = rcOnLeave(n,k,'pm');
           if (!a) ap++; if (!p) pp++;
-          if (a && p) full.push(n); else if (a) am.push(n); else if (p) pm.push(n);
+          if (a && p) full.push(n); else if (a) am.push(n); else if (p) pm.push(n); else present.push(n);
         });
-        offInfo.push({ am:am, pm:pm, full:full }); amP.push(ap); pmP.push(pp);
+        offInfo.push({ am:am, pm:pm, full:full, present:present }); amP.push(ap); pmP.push(pp);
       });
       window.__rcBezOff = offInfo;
       // 7 posities per kolom; onderste = groen (aanwezig), bovenste = grijs (vrij)
@@ -3928,10 +3928,14 @@ window.addEventListener('DOMContentLoaded', async function(){
                   if(!items||!items.length) return '';
                   var o=(window.__rcBezOff||[])[items[0].dataIndex]; if(!o) return '';
                   var lines=[];
-                  o.full.forEach(function(n){ lines.push('• '+n+' (hele dag)'); });
-                  o.am.forEach(function(n){ lines.push('• '+n+' (ochtend)'); });
-                  o.pm.forEach(function(n){ lines.push('• '+n+' (middag)'); });
-                  return lines.length? ['','Vrij:'].concat(lines) : ['','Iedereen aanwezig'];
+                  if(o.present && o.present.length){ lines.push('Aanwezig:'); o.present.forEach(function(n){ lines.push('• '+n); }); }
+                  var offc = o.full.length + o.am.length + o.pm.length;
+                  if(offc){ if(lines.length) lines.push(''); lines.push('Vrij:');
+                    o.full.forEach(function(n){ lines.push('• '+n+' (hele dag)'); });
+                    o.am.forEach(function(n){ lines.push('• '+n+' (ochtend)'); });
+                    o.pm.forEach(function(n){ lines.push('• '+n+' (middag)'); });
+                  }
+                  return lines.length? [''].concat(lines) : ['','Iedereen aanwezig'];
                 }
               }
             }
