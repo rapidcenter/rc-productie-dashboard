@@ -3815,6 +3815,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   // ===== Personele bezetting (verlof-snapshot uit Nmbrs, 02-07-2026) =====
   var RC_BEZ_NAMES = [];
   var RC_LEAVE = {};
+  var RC_RECURRING = {};  // vaste vrije dagen per medewerker (uit vast.json in de gist)
   function rcOnLeave(name, key, half){
     var r = RC_LEAVE[name] || [];
     for (var i=0;i<r.length;i++){
@@ -3824,6 +3825,21 @@ window.addEventListener('DOMContentLoaded', async function(){
         if (!half) return true;
         if (part === half) return true;
       }
+    }
+    return false;
+  }
+  function rcWeekdayNL(key){ var p=String(key).split('-'); var d=new Date(+p[0], +p[1]-1, +p[2]); return ['zo','ma','di','wo','do','vr','za'][d.getDay()]; }
+  function rcRecurringOff(name, key, half){
+    var arr = (RC_RECURRING && RC_RECURRING[name]) || [];
+    if (!arr.length) return false;
+    var wd = rcWeekdayNL(key);
+    for (var i=0;i<arr.length;i++){
+      var s = String(arr[i]).toLowerCase().trim();
+      var bits = s.split('-'); var dag = bits[0]; var deel = bits[1] || '';
+      if (dag !== wd) continue;
+      if (!deel || deel === 'heledag') return true;
+      if (!half) return true;
+      if ((deel === 'ochtend' && half === 'am') || (deel === 'middag' && half === 'pm')) return true;
     }
     return false;
   }
@@ -3842,6 +3858,11 @@ window.addEventListener('DOMContentLoaded', async function(){
         RC_LEAVE = d.leave;
         if (Array.isArray(d.names) && d.names.length) RC_BEZ_NAMES = d.names;
         window.__rcVerlofGenerated = d.generated || '';
+        try {
+          var vurl = u.replace(/[^\/]+$/, 'vast.json');
+          var rv = await fetch(vurl, { cache: 'no-store' });
+          if (rv.ok){ var vd = await rv.json(); if (vd && typeof vd === 'object') RC_RECURRING = vd; }
+        } catch(e){}
         if (window.__rcBezLast && typeof rcRenderBezetting === 'function'){
           rcRenderBezetting(window.__rcBezLast.labels, window.__rcBezLast.keys);
         }
@@ -3873,7 +3894,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       keys.forEach(function(k){
         var am=[], pm=[], full=[], present=[], ap=0, pp=0;
         RC_BEZ_NAMES.forEach(function(n){
-          var a = rcOnLeave(n,k,'am'), p = rcOnLeave(n,k,'pm');
+          var a = rcOnLeave(n,k,'am') || rcRecurringOff(n,k,'am'), p = rcOnLeave(n,k,'pm') || rcRecurringOff(n,k,'pm');
           if (!a) ap++; if (!p) pp++;
           if (a && p) full.push(n); else if (a) am.push(n); else if (p) pm.push(n); else present.push(n);
         });
