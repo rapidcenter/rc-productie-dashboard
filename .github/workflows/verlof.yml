@@ -28,7 +28,7 @@ jobs:
       - name: Gist bijwerken
         env:
           GIST_ID: ${{ secrets.GIST_ID }}
-          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_TOKEN: ${{ secrets.GIST_VERLOF }}
         run: |
           ID="$(printf '%s' "$GIST_ID" | tr -cd 'A-Fa-f0-9')"
           TOK="$(printf '%s' "$GIST_TOKEN" | tr -cd 'A-Za-z0-9_')"
