@@ -15,10 +15,12 @@ jobs:
         env:
           NMBRS_URL: ${{ secrets.NMBRS_URL }}
         run: |
-          # verwijder eventuele spaties/regeleindes die per ongeluk in de secret staan
-          URL="$(printf '%s' "$NMBRS_URL" | tr -d ' \t\r\n')"
+          # houd alleen geldige URL-tekens over (verwijdert quotes, NBSP, enters, etc.)
+          URL="$(printf '%s' "$NMBRS_URL" | tr -cd 'A-Za-z0-9:/?.=&_%-')"
+          echo "URL lengte na opschonen: ${#URL}"
           curl -sSL "$URL" -o feed.ics
           echo "feed bytes: $(wc -c < feed.ics)"
+          head -c 60 feed.ics; echo
       - name: verlof.json maken
         run: |
           python3 parse_verlof.py feed.ics verlof.json
@@ -28,8 +30,8 @@ jobs:
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
         run: |
-          ID="$(printf '%s' "$GIST_ID" | tr -d ' \t\r\n')"
-          TOK="$(printf '%s' "$GIST_TOKEN" | tr -d ' \t\r\n')"
+          ID="$(printf '%s' "$GIST_ID" | tr -cd 'A-Fa-f0-9')"
+          TOK="$(printf '%s' "$GIST_TOKEN" | tr -cd 'A-Za-z0-9_')"
           python3 -c "import json; c=open('verlof.json',encoding='utf-8').read(); open('payload.json','w').write(json.dumps({'files':{'gistfile1.txt':{'content':c}}}))"
           code=$(curl -sS -X PATCH \
             -H "Authorization: Bearer $TOK" \
