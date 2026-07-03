@@ -3848,9 +3848,8 @@ window.addEventListener('DOMContentLoaded', async function(){
       }
     } catch(e){ console.warn('[RC] verlof laden', e); }
   }
-  // Personele bezetting: per dag TWEE kolommen (ochtend/middag), elk opgedeeld in de 7
-  // medewerkers (groen=aanwezig, grijs=vrij). Label "7/<vrij>" boven elke dag. labels+keys
-  // komen uit de Orders-chart -> zelfde venster + volgt pannen.
+  // Personele bezetting: per dag TWEE kolommen (ochtend/middag). Groen (aanwezig) onderaan,
+  // grijs (vrij) bovenaan. Label bovenin = aantal aanwezig (0,5 per dagdeel, bv. 6.5).
   function rcRenderBezetting(labels, keys){
     try {
       if (!window.Chart || !Array.isArray(labels) || !labels.length) return;
@@ -3862,40 +3861,48 @@ window.addEventListener('DOMContentLoaded', async function(){
         var box = document.createElement('div');
         box.className = 'chart-box drukte-chart'; box.id = 'rcBezettingBox';
         box.innerHTML = '<div class="chart-title"><span>Personele bezetting</span>'
-          + '<span class="sub">per dag: links ochtend · rechts middag — groen = aanwezig, grijs = vrij</span></div>'
+          + '<span class="sub">per dag: links ochtend · rechts middag — groen = aanwezig, grijs = vrij · getal = aantal aanwezig</span></div>'
           + '<div class="drukte-canvas"><canvas id="rcBezetting"></canvas></div>';
         ordersBox.parentNode.insertBefore(box, ordersBox.nextSibling);
       }
       var canvas = document.getElementById('rcBezetting'); if (!canvas) return;
       var N = RC_BEZ_NAMES.length;
       var GREEN = '#16A34A', GREY = 'rgba(148,163,184,.5)', SEP = 'rgba(2,17,30,.85)';
-      var offInfo = keys.map(function(k){
-        var am=[], pm=[], full=[];
+      // per dag: wie is vrij (ochtend/middag/hele dag) + aantal aanwezig per dagdeel
+      var offInfo = [], amP = [], pmP = [];
+      keys.forEach(function(k){
+        var am=[], pm=[], full=[], ap=0, pp=0;
         RC_BEZ_NAMES.forEach(function(n){
           var a = rcOnLeave(n,k,'am'), p = rcOnLeave(n,k,'pm');
+          if (!a) ap++; if (!p) pp++;
           if (a && p) full.push(n); else if (a) am.push(n); else if (p) pm.push(n);
         });
-        return { am:am, pm:pm, full:full };
+        offInfo.push({ am:am, pm:pm, full:full }); amP.push(ap); pmP.push(pp);
       });
       window.__rcBezOff = offInfo;
+      // 7 posities per kolom; onderste = groen (aanwezig), bovenste = grijs (vrij)
+      var ones = keys.map(function(){ return 1; });
       var ds = [];
-      RC_BEZ_NAMES.forEach(function(n, i){
-        var ones = keys.map(function(){ return 1; });
-        var amColors = keys.map(function(k){ return rcOnLeave(n,k,'am') ? GREY : GREEN; });
-        var pmColors = keys.map(function(k){ return rcOnLeave(n,k,'pm') ? GREY : GREEN; });
-        ds.push({ label:'am'+i, data:ones, stack:'am', backgroundColor:amColors, borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
-        ds.push({ label:'pm'+i, data:ones, stack:'pm', backgroundColor:pmColors, borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
-      });
+      for (var p = 0; p < N; p++){
+        (function(pp){
+          ds.push({ label:'am'+pp, data:ones, stack:'am',
+            backgroundColor: keys.map(function(_k,j){ return pp < amP[j] ? GREEN : GREY; }),
+            borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
+          ds.push({ label:'pm'+pp, data:ones, stack:'pm',
+            backgroundColor: keys.map(function(_k,j){ return pp < pmP[j] ? GREEN : GREY; }),
+            borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
+        })(p);
+      }
       var labelPlugin = { id:'rcBezLabels', afterDatasetsDraw:function(c){
         try {
           var xs=c.scales.x, ys=c.scales.y; if(!xs||!ys) return;
           var cx=c.ctx; cx.save(); cx.font='700 10px Roboto'; cx.textAlign='center'; cx.textBaseline='bottom';
           var top=ys.getPixelForValue(N);
-          (window.__rcBezOff||[]).forEach(function(o,j){
-            var free = o.full.length + o.am.length + o.pm.length;
-            var x = xs.getPixelForValue(j);
-            cx.fillStyle = free>0 ? '#F59E0B' : '#16A34A';
-            cx.fillText(N + '/' + free, x, top - 3);
+          keys.forEach(function(k,j){
+            var pres=(amP[j]+pmP[j])/2;
+            var txt=(pres%1===0)?String(pres):pres.toFixed(1);
+            cx.fillStyle = pres>=N ? '#16A34A' : '#F59E0B';
+            cx.fillText(txt, xs.getPixelForValue(j), top-3);
           });
           cx.restore();
         } catch(e){}
