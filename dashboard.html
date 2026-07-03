@@ -3815,7 +3815,18 @@ window.addEventListener('DOMContentLoaded', async function(){
   // ===== Personele bezetting (verlof-snapshot uit Nmbrs, 02-07-2026) =====
   var RC_BEZ_NAMES = [];
   var RC_LEAVE = {};
-  function rcOnLeave(name, key){ var r = RC_LEAVE[name] || []; for (var i=0;i<r.length;i++){ if (key >= r[i][0] && key < r[i][1]) return true; } return false; }
+  function rcOnLeave(name, key, half){
+    var r = RC_LEAVE[name] || [];
+    for (var i=0;i<r.length;i++){
+      if (key >= r[i][0] && key < r[i][1]){
+        var part = r[i][2];
+        if (!part) return true;
+        if (!half) return true;
+        if (part === half) return true;
+      }
+    }
+    return false;
+  }
   var RC_VERLOF_URL = '';  // wordt door de bookmark ingevuld via window.__RC_VERLOF_URL (geen geheim in dit openbare bestand)
   // Haalt het verlof-briefje op van GitHub (CORS-ok). Lukt dit, dan vervangt het de ingebakken
   // snapshot (RC_LEAVE/RC_BEZ_NAMES) en hertekent de bezetting. Faalt het, dan blijft de
@@ -3837,8 +3848,9 @@ window.addEventListener('DOMContentLoaded', async function(){
       }
     } catch(e){ console.warn('[RC] verlof laden', e); }
   }
-  // Tekent onder 'Orders per dag' een gestapelde bar (Aanwezig/Afwezig) per werkdag voor de 7
-  // medewerkers. labels + keys komen uit de Orders-chart, dus zelfde venster + volgt pannen.
+  // Personele bezetting: per dag TWEE kolommen (ochtend/middag), elk opgedeeld in de 7
+  // medewerkers (groen=aanwezig, grijs=vrij). Label "7/<vrij>" boven elke dag. labels+keys
+  // komen uit de Orders-chart -> zelfde venster + volgt pannen.
   function rcRenderBezetting(labels, keys){
     try {
       if (!window.Chart || !Array.isArray(labels) || !labels.length) return;
@@ -3850,47 +3862,79 @@ window.addEventListener('DOMContentLoaded', async function(){
         var box = document.createElement('div');
         box.className = 'chart-box drukte-chart'; box.id = 'rcBezettingBox';
         box.innerHTML = '<div class="chart-title"><span>Personele bezetting</span>'
-          + '<span class="sub">afwezig o.b.v. Nmbrs-verlof \u00b7 ' + RC_BEZ_NAMES.length + ' medewerkers</span></div>'
+          + '<span class="sub">per dag: links ochtend · rechts middag — groen = aanwezig, grijs = vrij</span></div>'
           + '<div class="drukte-canvas"><canvas id="rcBezetting"></canvas></div>';
         ordersBox.parentNode.insertBefore(box, ordersBox.nextSibling);
       }
       var canvas = document.getElementById('rcBezetting'); if (!canvas) return;
-      var absent = keys.map(function(k){ return RC_BEZ_NAMES.filter(function(n){ return rcOnLeave(n, k); }); });
-      var absentCnt = absent.map(function(a){ return a.length; });
-      var presentCnt = absentCnt.map(function(a){ return RC_BEZ_NAMES.length - a; });
-      window.__rcBezAbsent = absent;
-      if (window.__rcBezChart){
-        var ch = window.__rcBezChart;
-        ch.data.labels = labels; ch.data.datasets[0].data = presentCnt; ch.data.datasets[1].data = absentCnt;
-        ch.update('none'); return;
-      }
+      var N = RC_BEZ_NAMES.length;
+      var GREEN = '#16A34A', GREY = 'rgba(148,163,184,.5)', SEP = 'rgba(2,17,30,.85)';
+      var offInfo = keys.map(function(k){
+        var am=[], pm=[], full=[];
+        RC_BEZ_NAMES.forEach(function(n){
+          var a = rcOnLeave(n,k,'am'), p = rcOnLeave(n,k,'pm');
+          if (a && p) full.push(n); else if (a) am.push(n); else if (p) pm.push(n);
+        });
+        return { am:am, pm:pm, full:full };
+      });
+      window.__rcBezOff = offInfo;
+      var ds = [];
+      RC_BEZ_NAMES.forEach(function(n, i){
+        var ones = keys.map(function(){ return 1; });
+        var amColors = keys.map(function(k){ return rcOnLeave(n,k,'am') ? GREY : GREEN; });
+        var pmColors = keys.map(function(k){ return rcOnLeave(n,k,'pm') ? GREY : GREEN; });
+        ds.push({ label:'am'+i, data:ones, stack:'am', backgroundColor:amColors, borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
+        ds.push({ label:'pm'+i, data:ones, stack:'pm', backgroundColor:pmColors, borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
+      });
+      var labelPlugin = { id:'rcBezLabels', afterDatasetsDraw:function(c){
+        try {
+          var xs=c.scales.x, ys=c.scales.y; if(!xs||!ys) return;
+          var cx=c.ctx; cx.save(); cx.font='700 10px Roboto'; cx.textAlign='center'; cx.textBaseline='bottom';
+          var top=ys.getPixelForValue(N);
+          (window.__rcBezOff||[]).forEach(function(o,j){
+            var free = o.full.length + o.am.length + o.pm.length;
+            var x = xs.getPixelForValue(j);
+            cx.fillStyle = free>0 ? '#F59E0B' : '#16A34A';
+            cx.fillText(N + '/' + free, x, top - 3);
+          });
+          cx.restore();
+        } catch(e){}
+      }};
+      if (window.__rcBezChart){ try{ window.__rcBezChart.destroy(); }catch(e){} window.__rcBezChart=null; }
       window.__rcBezChart = new window.Chart(canvas, {
-        type: 'bar',
-        data: { labels: labels, datasets: [
-          { label: 'Aanwezig', data: presentCnt, backgroundColor: '#16A34A', stack: 'bez', categoryPercentage: 0.7, barPercentage: 0.9 },
-          { label: 'Afwezig', data: absentCnt, backgroundColor: 'rgba(148,163,184,.55)', stack: 'bez', categoryPercentage: 0.7, barPercentage: 0.9 }
-        ]},
-        options: {
-          responsive: true, maintainAspectRatio: false, layout: { padding: { top: 10 } },
-          interaction: { mode: 'index', intersect: false },
-          scales: {
-            x: { stacked: true, ticks: { color: '#87898B', font: { size: 10, family: 'Roboto' }, maxRotation: 45, minRotation: 30 }, grid: { color: 'rgba(255,255,255,.04)' } },
-            y: { stacked: true, beginAtZero: true, max: RC_BEZ_NAMES.length, ticks: { stepSize: 1, color: '#87898B', font: { size: 10, family: 'Roboto' } }, grid: { color: 'rgba(255,255,255,.06)' } }
+        type:'bar',
+        data:{ labels:labels, datasets:ds },
+        options:{
+          responsive:true, maintainAspectRatio:false, layout:{ padding:{ top:18 } },
+          interaction:{ mode:'index', intersect:false },
+          scales:{
+            x:{ stacked:true, ticks:{ color:'#87898B', font:{size:10,family:'Roboto'}, maxRotation:45, minRotation:30 }, grid:{ color:'rgba(255,255,255,.04)' } },
+            y:{ stacked:true, beginAtZero:true, max:N, ticks:{ stepSize:1, color:'#87898B', font:{size:10,family:'Roboto'} }, grid:{ color:'rgba(255,255,255,.06)' } }
           },
-          plugins: {
-            legend: { display: true, position: 'top', align: 'start', labels: { color: '#CFD2D3', font: { size: 11, family: 'Roboto' }, boxWidth: 12, padding: 10 } },
-            tooltip: { backgroundColor: '#001523', titleColor: '#fff', bodyColor: '#CFD2D3', borderColor: '#0096D6', borderWidth: 1,
-              callbacks: { afterBody: function(items){
-                if (!items || !items.length) return '';
-                var a = (window.__rcBezAbsent || [])[items[0].dataIndex] || [];
-                if (!a.length) return ['', 'Iedereen aanwezig'];
-                return ['', 'Afwezig:'].concat(a.map(function(n){ return '\u2022 ' + n; }));
-              } } }
+          plugins:{
+            legend:{ display:false },
+            tooltip:{ backgroundColor:'#001523', titleColor:'#fff', bodyColor:'#CFD2D3', borderColor:'#0096D6', borderWidth:1,
+              filter:function(it){ return it.datasetIndex===0; },
+              callbacks:{
+                label:function(){ return ''; },
+                afterBody:function(items){
+                  if(!items||!items.length) return '';
+                  var o=(window.__rcBezOff||[])[items[0].dataIndex]; if(!o) return '';
+                  var lines=[];
+                  o.full.forEach(function(n){ lines.push('• '+n+' (hele dag)'); });
+                  o.am.forEach(function(n){ lines.push('• '+n+' (ochtend)'); });
+                  o.pm.forEach(function(n){ lines.push('• '+n+' (middag)'); });
+                  return lines.length? ['','Vrij:'].concat(lines) : ['','Iedereen aanwezig'];
+                }
+              }
+            }
           }
-        }
+        },
+        plugins:[labelPlugin]
       });
     } catch(e){ console.warn('[RC] bezetting', e); }
   }
+
   function rcAddFinishedDatasetToDrukte(){
     var chart = null;
     try {
