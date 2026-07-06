@@ -3889,6 +3889,9 @@ window.addEventListener('DOMContentLoaded', async function(){
       var canvas = document.getElementById('rcBezetting'); if (!canvas) return;
       var N = RC_BEZ_NAMES.length;
       var GREEN = '#16A34A', GREY = 'rgba(148,163,184,.5)', SEP = 'rgba(2,17,30,.85)';
+      // aanwezig-blokjes kleuren op onderbezetting: aantal afwezig (grijs) per kolom
+      // 0 -> groen, t/m 2 -> donkergeel, t/m 4 -> oranje, meer -> rood
+      function presentColor(absent){ if(absent<=0) return '#16A34A'; if(absent<=2) return '#CA8A04'; if(absent<=4) return '#EA580C'; return '#DC2626'; }
       // per dag: wie is vrij (ochtend/middag/hele dag) + aantal aanwezig per dagdeel
       var offInfo = [], amP = [], pmP = [];
       keys.forEach(function(k){
@@ -3907,10 +3910,10 @@ window.addEventListener('DOMContentLoaded', async function(){
       for (var p = 0; p < N; p++){
         (function(pp){
           ds.push({ label:'am'+pp, data:ones, stack:'am',
-            backgroundColor: keys.map(function(_k,j){ return pp < amP[j] ? GREEN : GREY; }),
+            backgroundColor: keys.map(function(_k,j){ return pp < amP[j] ? presentColor(N - amP[j]) : GREY; }),
             borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
           ds.push({ label:'pm'+pp, data:ones, stack:'pm',
-            backgroundColor: keys.map(function(_k,j){ return pp < pmP[j] ? GREEN : GREY; }),
+            backgroundColor: keys.map(function(_k,j){ return pp < pmP[j] ? presentColor(N - pmP[j]) : GREY; }),
             borderColor:SEP, borderWidth:{top:1}, categoryPercentage:0.82, barPercentage:0.92 });
         })(p);
       }
