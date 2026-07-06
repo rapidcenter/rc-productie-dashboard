@@ -4694,6 +4694,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   function rcToggleStatus(s){
     var f = window.__rcStatusFilter || (window.__rcStatusFilter = new Set());
     if (f.has(s)) f.delete(s); else f.add(s);
+    if (window.__rcLevertermijnFilter) window.__rcLevertermijnFilter.clear();  // andere dimensie legen -> elke klik licht z'n eigen dagen apart op
     rcApplyWerkstroomFilter();
   }
   function rcLtCategory(name){
@@ -4707,6 +4708,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   function rcToggleLevertermijn(cat){
     var f = window.__rcLevertermijnFilter || (window.__rcLevertermijnFilter = new Set());
     if (f.has(cat)) f.delete(cat); else f.add(cat);
+    if (window.__rcStatusFilter) window.__rcStatusFilter.clear();  // andere dimensie legen
     rcApplyWerkstroomFilter();
   }
   function rcApplyWerkstroomFilter(){
