@@ -4651,8 +4651,10 @@ window.addEventListener('DOMContentLoaded', async function(){
       var dayset = {}, backlog = false, future = false;
       Object.keys(pm).forEach(function(pid){
         var st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
-        if (anyS && !sf.has(st)) return;
-        if (anyL && !lf.has(rcLtCategory(ptm[pid] || ''))) return;
+        // Unie: dag licht op als de order matcht met de status-selectie OF de levertermijn-selectie
+        var okS = anyS && sf.has(st);
+        var okL = anyL && lf.has(rcLtCategory(ptm[pid] || ''));
+        if (!(okS || okL)) return;
         var ship = pm[pid];
         dayset[dkey(new Date(ship))] = 1;
         if (ship < today || st === 'Backorder') backlog = true;
