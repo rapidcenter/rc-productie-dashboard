@@ -3174,7 +3174,10 @@ window.addEventListener('DOMContentLoaded', async function(){
   #tab-verlof .rc-vl-track { position:relative; flex:1; height:28px }
   #tab-verlof .rc-vl-headrow { height:20px }
   #tab-verlof .rc-vl-headrow .rc-vl-name { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink3); font-weight:700 }
-  #tab-verlof .rc-vl-rows .rc-vl-row:nth-child(odd) .rc-vl-track { background:rgba(255,255,255,.025) }
+  #tab-verlof .rc-vl-rows .rc-vl-row:nth-child(odd) { background:rgba(255,255,255,.06) }
+  #tab-verlof .rc-vl-rows .rc-vl-row:nth-child(even) { background:rgba(255,255,255,.015) }
+  #tab-verlof .rc-vl-rows .rc-vl-row:hover { background:rgba(58,141,222,.18) }
+  #tab-verlof .rc-vl-rows .rc-vl-row:hover .rc-vl-name { color:#fff }
   #tab-verlof .rc-vl-grid { position:absolute; top:0; bottom:0; width:1px; background:rgba(255,255,255,.07) }
   #tab-verlof .rc-vl-mlbl { position:absolute; top:3px; padding-left:3px; font-size:10px; color:var(--ink3) }
   #tab-verlof .rc-vl-bar { position:absolute; top:6px; height:16px; border-radius:3px; background:#3A8DDE; box-shadow:0 0 0 1px rgba(0,0,0,.15) }
@@ -3890,7 +3893,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   function rcRenderVerlofTab(){
     try {
       var host = document.getElementById('tab-verlof'); if (!host) return;
-      var names = (RC_BEZ_NAMES && RC_BEZ_NAMES.length) ? RC_BEZ_NAMES : Object.keys(RC_LEAVE || {});
+      var names = Object.keys(RC_LEAVE || {}).sort(function(a,b){ return a.localeCompare(b, 'nl'); });
       if (!names.length || !RC_LEAVE){ host.innerHTML = '<div style="padding:20px;color:var(--ink3)">Verlofdata nog niet geladen…</div>'; return; }
       function ymd(s){ var p = String(s).split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
       var DAY = 86400000;
