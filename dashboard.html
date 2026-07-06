@@ -3165,6 +3165,22 @@ window.addEventListener('DOMContentLoaded', async function(){
     color:var(--ink2); background:var(--surface2); border:1px solid var(--border2); border-radius:6px; padding:4px 10px; cursor:pointer; line-height:1; transition:all .12s ease }
   #tab-drukte .rc-mt-btn:hover { border-color:var(--rc-blue); color:var(--ink) }
   #tab-drukte .rc-mt-btn.active { background:rgba(0,150,214,.16); border-color:var(--rc-blue); color:#fff }
+  /* Verlofoverzicht-tab (horizontale jaarplanning) */
+  #tab-verlof .rc-vl { font-family:'Roboto',system-ui,sans-serif; padding:6px 4px 2px }
+  #tab-verlof .rc-vl-row { display:flex; align-items:stretch }
+  #tab-verlof .rc-vl-name { width:150px; flex:none; font-size:12px; color:var(--ink2); font-weight:600;
+    display:flex; align-items:center; padding:0 8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    border-right:1px solid var(--border2) }
+  #tab-verlof .rc-vl-track { position:relative; flex:1; height:28px }
+  #tab-verlof .rc-vl-headrow { height:20px }
+  #tab-verlof .rc-vl-headrow .rc-vl-name { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink3); font-weight:700 }
+  #tab-verlof .rc-vl-rows .rc-vl-row:nth-child(odd) .rc-vl-track { background:rgba(255,255,255,.025) }
+  #tab-verlof .rc-vl-grid { position:absolute; top:0; bottom:0; width:1px; background:rgba(255,255,255,.07) }
+  #tab-verlof .rc-vl-mlbl { position:absolute; top:3px; padding-left:3px; font-size:10px; color:var(--ink3) }
+  #tab-verlof .rc-vl-bar { position:absolute; top:6px; height:16px; border-radius:3px; background:#3A8DDE; box-shadow:0 0 0 1px rgba(0,0,0,.15) }
+  #tab-verlof .rc-vl-bar.half { opacity:.45 }
+  #tab-verlof .rc-vl-today { position:absolute; top:0; bottom:0; width:2px; background:#EF4444; z-index:3 }
+  #tab-verlof .rc-vl-legenda { padding:10px 8px 0; font-size:10.5px; color:var(--ink3) }
 </style>
 <script id="amfg-live-loader">
 (function(){
@@ -3866,8 +3882,69 @@ window.addEventListener('DOMContentLoaded', async function(){
         if (window.__rcBezLast && typeof rcRenderBezetting === 'function'){
           rcRenderBezetting(window.__rcBezLast.labels, window.__rcBezLast.keys);
         }
+        if (typeof rcRenderVerlofTab === 'function') rcRenderVerlofTab();
       }
     } catch(e){ console.warn('[RC] verlof laden', e); }
+  }
+  // ===== Tab 'Verlofoverzicht' — horizontale jaarplanning o.b.v. Nmbrs-verlof =====
+  function rcRenderVerlofTab(){
+    try {
+      var host = document.getElementById('tab-verlof'); if (!host) return;
+      var names = (RC_BEZ_NAMES && RC_BEZ_NAMES.length) ? RC_BEZ_NAMES : Object.keys(RC_LEAVE || {});
+      if (!names.length || !RC_LEAVE){ host.innerHTML = '<div style="padding:20px;color:var(--ink3)">Verlofdata nog niet geladen…</div>'; return; }
+      function ymd(s){ var p = String(s).split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
+      var DAY = 86400000;
+      var minY = 9999, maxY = 0;
+      names.forEach(function(n){ (RC_LEAVE[n]||[]).forEach(function(r){ var a=ymd(r[0]), b=ymd(r[1]); if(a.getFullYear()<minY)minY=a.getFullYear(); if(b.getFullYear()>maxY)maxY=b.getFullYear(); }); });
+      if (minY > maxY){ minY = maxY = new Date().getFullYear(); }
+      var axisStart = new Date(minY,0,1), axisEnd = new Date(maxY,11,31);
+      var total = Math.round((axisEnd - axisStart)/DAY) + 1;
+      function pct(d){ var d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return ((d0 - axisStart)/DAY)/total*100; }
+      var months = []; var cur = new Date(minY,0,1);
+      while (cur <= axisEnd){ months.push(new Date(cur)); cur.setMonth(cur.getMonth()+1); }
+      var MN = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+      function grid(withLabels){
+        var s = '';
+        months.forEach(function(md){ var l = pct(md); s += '<div class="rc-vl-grid" style="left:'+l+'%"></div>'; if (withLabels) s += '<div class="rc-vl-mlbl" style="left:'+l+'%">'+MN[md.getMonth()]+(md.getMonth()===0?(" '"+String(md.getFullYear()).slice(2)):'')+'</div>'; });
+        var td = new Date(); if (td >= axisStart && td <= axisEnd) s += '<div class="rc-vl-today" style="left:'+pct(td)+'%" title="vandaag"></div>';
+        return s;
+      }
+      function dm(d){ return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+      var html = '<div class="rc-vl">';
+      html += '<div class="rc-vl-row rc-vl-headrow"><div class="rc-vl-name">Medewerker</div><div class="rc-vl-track">'+grid(true)+'</div></div>';
+      html += '<div class="rc-vl-rows">';
+      names.forEach(function(n){
+        var bars = '';
+        (RC_LEAVE[n]||[]).forEach(function(r){
+          var a = ymd(r[0]), b = ymd(r[1]); var left = pct(a); var w = Math.max(((b - a)/DAY)/total*100, 0.4);
+          var half = r[2] ? ' half' : '';
+          var endDisp = new Date(b - DAY);
+          var lbl = dm(a) + (endDisp > a ? (' t/m ' + dm(endDisp)) : '') + (r[2] ? (' ('+(r[2]==='am'?'ochtend':'middag')+')') : '');
+          bars += '<div class="rc-vl-bar'+half+'" style="left:'+left+'%;width:'+w+'%" title="'+lbl+'"></div>';
+        });
+        html += '<div class="rc-vl-row"><div class="rc-vl-name" title="'+n+'">'+n+'</div><div class="rc-vl-track">'+grid(false)+bars+'</div></div>';
+      });
+      html += '</div>';
+      html += '<div class="rc-vl-legenda">Verlof uit Nmbrs · lichtere balk = halve dag · rode lijn = vandaag · vaste vrije dagen niet getoond</div>';
+      html += '</div>';
+      host.innerHTML = html;
+    } catch(e){ console.warn('[RC] verlof tab', e); }
+  }
+  function rcInstallVerlofTab(){
+    try {
+      var nav = document.querySelector('.tabnav');
+      if (nav && !document.getElementById('rcVerlofTabBtn')){
+        var b = document.createElement('button'); b.id = 'rcVerlofTabBtn'; b.className = 'tab-btn';
+        b.textContent = 'Verlofoverzicht'; b.setAttribute('onclick', "switchTab('verlof',this)");
+        nav.appendChild(b);
+      }
+      var main = document.querySelector('main');
+      if (main && !document.getElementById('tab-verlof')){
+        var sec = document.createElement('section'); sec.className = 'tab-section'; sec.id = 'tab-verlof';
+        main.appendChild(sec);
+      }
+      rcRenderVerlofTab();
+    } catch(e){ console.warn('[RC] verlof tab install', e); }
   }
   // Personele bezetting: per dag TWEE kolommen (ochtend/middag). Groen (aanwezig) onderaan,
   // grijs (vrij) bovenaan. Label bovenin = aantal aanwezig (0,5 per dagdeel, bv. 6.5).
@@ -4899,6 +4976,7 @@ window.addEventListener('DOMContentLoaded', async function(){
     setTimeout(rcInstallDrukteNav, 400);
     setTimeout(rcHideDrukteCharts, 450);
     setTimeout(rcInstallWerkstroom, 500);
+    setTimeout(rcInstallVerlofTab, 560);
     setTimeout(rcLoadVerlof, 650);
     setTimeout(async () => {
       try {
