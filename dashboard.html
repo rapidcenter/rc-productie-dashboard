@@ -3426,6 +3426,20 @@ window.addEventListener('DOMContentLoaded', async function(){
     if (typeof ACCOUNT_STATUS_MAP !== 'undefined') ACCOUNT_STATUS_MAP = accountStatus;
     if (typeof setPartsStatus === 'function') setPartsStatus(parts.length);
     if (typeof setOrdersStatus === 'function') setOrdersStatus(Object.keys(orderStatus).length);
+    // Snelle voorproef: haal 1 pagina levertermijnen (productionTimeName) op VOOR de eerste
+    // render, zodat de 'Afgesproken levertermijnen'-tegels meteen zichtbaar zijn. De volledige
+    // sweep hieronder vult later de rest aan. Faalt dit, dan gewoon doorgaan (geen blokkade).
+    try {
+      var _pfFrom = new Date(Date.now() - 30 * 86400000).toISOString();
+      var _pfQ = 'limit=200&offset=0&sort.direction=desc&sort.by=orderCreatedAt&timezone=2&stateFilters=%7B%7D&search.filter=&from.orderCreatedAt=' + encodeURIComponent('"' + _pfFrom + '"');
+      var _pfR = await fetch('/management-service/api/v1/ticket-model/project?' + _pfQ, { headers: H });
+      if (_pfR.ok){
+        var _pfRows = await _pfR.json(); _pfRows = Array.isArray(_pfRows) ? _pfRows : (_pfRows.rows || []);
+        var _pf = window.__rcProdTimeByProject || {};
+        _pfRows.forEach(function(r){ if (r.projectId && r.productionTimeName && !_pf[r.projectId]) _pf[r.projectId] = r.productionTimeName; });
+        window.__rcProdTimeByProject = _pf;
+      }
+    } catch(e){ console.warn('[RC] levertermijn voorproef', e); }
     if (typeof refreshAll === 'function') refreshAll();
 
     // Verwerkt-lijn aanvullen met 'Order finished ***'-orders (deadline-basis),
