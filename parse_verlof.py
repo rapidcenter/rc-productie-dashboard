@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-# Leest een Nmbrs iCal-feed en maakt er verlof.json van voor de 7 medewerkers.
+# Leest een Nmbrs iCal-feed en maakt er verlof.json van.
+# - "leave": ALLE medewerkers uit de feed (voor het Verlofoverzicht).
+# - "names": de 7 productie-medewerkers (voor de Personele bezetting-grafiek).
 # Gebruik: python3 parse_verlof.py feed.ics verlof.json
 import sys, json, re
-from datetime import date, timedelta
+from datetime import date
 
-NAMES = ["Ticho Zomer","Maxym Ebeling","Nigel Stikker","Guido Saimbang",
-         "Bram van Vliet","Geert van der Wouden","Niels van der Werff"]
+# Alleen deze 7 worden in de bezetting-grafiek getoond:
+BEZ_NAMES = ["Ticho Zomer","Maxym Ebeling","Nigel Stikker","Guido Saimbang",
+             "Bram van Vliet","Geert van der Wouden","Niels van der Werff"]
 
 def field(block, key):
     m = re.search(r'^'+key+r'[^:\r\n]*:(.*)$', block, re.M)
@@ -30,23 +33,22 @@ def half_of(text):
     return None
 
 def parse(text):
-    leave = {n: [] for n in NAMES}
+    leave = {}
     for block in re.findall(r'BEGIN:VEVENT(.*?)END:VEVENT', text, re.S):
         desc = field(block, 'DESCRIPTION'); summ = field(block, 'SUMMARY')
         ds = field(block, 'DTSTART'); de = field(block, 'DTEND')
         if not ds or not de: continue
         name = person_of(desc)
-        if name not in leave: continue
+        if len(name) < 2: continue            # skip lege/onzin-namen
         try:
             d0 = to_date(ds); d1 = to_date(de)
         except Exception:
             continue
         entry = [to_ymd(ds), to_ymd(de)]
-        # halve dag alleen bij een enkele dag (DTEND = DTSTART + 1)
-        if (d1 - d0).days == 1:
+        if (d1 - d0).days == 1:                # halve dag alleen bij een enkele dag
             h = half_of(summ + ' ' + desc)
             if h: entry.append(h)
-        leave[name].append(entry)
+        leave.setdefault(name, []).append(entry)
     return leave
 
 def main():
@@ -54,10 +56,9 @@ def main():
     out = sys.argv[2] if len(sys.argv) > 2 else 'verlof.json'
     text = open(src, encoding='utf-8', errors='replace').read()
     leave = parse(text)
-    obj = {"generated": date.today().isoformat(), "names": NAMES, "leave": leave}
+    obj = {"generated": date.today().isoformat(), "names": BEZ_NAMES, "leave": leave}
     open(out, 'w', encoding='utf-8').write(json.dumps(obj, ensure_ascii=False))
-    tot = sum(len(v) for v in leave.values())
-    print("verlof.json geschreven:", tot, "verlof-items over", len([n for n in NAMES if leave[n]]), "medewerkers")
+    print("verlof.json:", sum(len(v) for v in leave.values()), "items over", len(leave), "medewerkers (bezetting-namen:", len(BEZ_NAMES), ")")
 
 if __name__ == '__main__':
     main()
