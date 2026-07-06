@@ -4655,42 +4655,48 @@ window.addEventListener('DOMContentLoaded', async function(){
       document.querySelectorAll('.rc-ship-hl').forEach(function(el){ el.classList.remove('rc-ship-hl'); });
       var sf = window.__rcStatusFilter, lf = window.__rcLevertermijnFilter;
       var anyS = sf && sf.size, anyL = lf && lf.size;
-      if ((!anyS && !anyL) || typeof getOpenParts !== 'function') return;
-      var ptm = window.__rcProdTimeByProject || {};
-      var openParts = getOpenParts() || [];
-      var pm = {};
-      openParts.forEach(function(p){ if (!p.shipping) return; if (!pm[p.project] || p.shipping > pm[p.project]) pm[p.project] = p.shipping; });
-      var today = startOfDay(new Date());
-      var off = (typeof vandaagWeekOffset !== 'undefined') ? vandaagWeekOffset : 0;
-      var monday = mondayOfWeek(new Date()); monday.setDate(monday.getDate() + off * 7);
-      var friday = new Date(monday); friday.setDate(friday.getDate() + 4);
-      var fridayEnd = new Date(friday); fridayEnd.setHours(23,59,59,999);
-      function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+      var kpi = (typeof activeKpiFilters !== 'undefined' && activeKpiFilters) ? activeKpiFilters : null;
+      var hasKpi = kpi && kpi.size;
+      function kfHas(k){ return hasKpi && kpi.has(k); }
+      if (!anyS && !anyL && !hasKpi) return;
       var dayset = {}, backlog = false, future = false;
-      Object.keys(pm).forEach(function(pid){
-        var st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
-        // Unie: dag licht op als de order matcht met de status-selectie OF de levertermijn-selectie
-        var okS = anyS && sf.has(st);
-        var okL = anyL && lf.has(rcLtCategory(ptm[pid] || ''));
-        if (!(okS || okL)) return;
-        var ship = pm[pid];
-        dayset[dkey(new Date(ship))] = 1;
-        if (ship < today || st === 'Backorder') backlog = true;
-        if (ship > fridayEnd) future = true;
-      });
+      if ((anyS || anyL) && typeof getOpenParts === 'function'){
+        var ptm = window.__rcProdTimeByProject || {};
+        var openParts = getOpenParts() || [];
+        var pm = {};
+        openParts.forEach(function(p){ if (!p.shipping) return; if (!pm[p.project] || p.shipping > pm[p.project]) pm[p.project] = p.shipping; });
+        var today = startOfDay(new Date());
+        var off = (typeof vandaagWeekOffset !== 'undefined') ? vandaagWeekOffset : 0;
+        var monday = mondayOfWeek(new Date()); monday.setDate(monday.getDate() + off * 7);
+        var friday = new Date(monday); friday.setDate(friday.getDate() + 4);
+        var fridayEnd = new Date(friday); fridayEnd.setHours(23,59,59,999);
+        var dkey = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+        Object.keys(pm).forEach(function(pid){
+          var st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
+          var okS = anyS && sf.has(st);
+          var okL = anyL && lf.has(rcLtCategory(ptm[pid] || ''));
+          if (!(okS || okL)) return;
+          var ship = pm[pid];
+          dayset[dkey(new Date(ship))] = 1;
+          if (ship < today || st === 'Backorder') backlog = true;
+          if (ship > fridayEnd) future = true;
+        });
+      }
       document.querySelectorAll('#tab-vandaag .kpi-grid .kpi-day').forEach(function(tile){
         var m = (tile.getAttribute('onclick') || '').match(/setKpiFilter\('([^']+)'/); if (!m) return;
         var key = m[1];
-        var hit = (key === 'backlog' && backlog) || (key === 'future' && future)
+        var wsHit = (key === 'backlog' && backlog) || (key === 'future' && future)
           || (key !== 'backlog' && key !== 'future' && dayset[key]);
-        if (hit) tile.classList.add('rc-ship-hl');
+        if (wsHit || kfHas(key)) tile.classList.add('rc-ship-hl');
       });
       document.querySelectorAll('#kalenderCard .kal-cell').forEach(function(cell){
         var m = (cell.getAttribute('onclick') || '').match(/setKpiFilter\('([^']+)'/); if (!m) return;
-        if (dayset[m[1]]) cell.classList.add('rc-ship-hl');
+        var key = m[1];
+        if (dayset[key] || kfHas(key)) cell.classList.add('rc-ship-hl');
       });
     } catch(e){ console.warn('[RC] ship highlight', e); }
   }
+
   function rcToggleStatus(s){
     var f = window.__rcStatusFilter || (window.__rcStatusFilter = new Set());
     if (f.has(s)) f.delete(s); else f.add(s);
