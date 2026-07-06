@@ -3494,7 +3494,11 @@ window.addEventListener('DOMContentLoaded', async function(){
               }
               if (names && names.length){ p.pps = names; _changed++; }
             });
-            if (_changed && typeof refreshAll === 'function') refreshAll();
+            // Altijd opnieuw renderen zodra de sweep klaar is: __rcProdTimeByProject is nu
+            // gevuld, dus de 'Afgesproken levertermijnen'-tegels + KPI-subregel + kolom moeten
+            // bijwerken (ook als er geen PPS-namen veranderd zijn). Dit voorkomt een leeg vak
+            // wanneer de trage sweep pas na de eerste render binnenkomt.
+            if ((_changed || Object.keys(ptByProject).length) && typeof refreshAll === 'function') refreshAll();
           }
         } catch(e){ console.warn('[RC] pps toewijzen', e); }
         if (window.Chart && typeof window.Chart.getChart === 'function'
