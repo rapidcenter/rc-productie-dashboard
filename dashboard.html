@@ -4659,6 +4659,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       var hasKpi = kpi && kpi.size;
       function kfHas(k){ return hasKpi && kpi.has(k); }
       if (!anyS && !anyL && !hasKpi) return;
+      function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
       var dayset = {}, backlog = false, future = false;
       if ((anyS || anyL) && typeof getOpenParts === 'function'){
         var ptm = window.__rcProdTimeByProject || {};
@@ -4670,7 +4671,6 @@ window.addEventListener('DOMContentLoaded', async function(){
         var monday = mondayOfWeek(new Date()); monday.setDate(monday.getDate() + off * 7);
         var friday = new Date(monday); friday.setDate(friday.getDate() + 4);
         var fridayEnd = new Date(friday); fridayEnd.setHours(23,59,59,999);
-        var dkey = function(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
         Object.keys(pm).forEach(function(pid){
           var st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
           var okS = anyS && sf.has(st);
@@ -4682,6 +4682,17 @@ window.addEventListener('DOMContentLoaded', async function(){
           if (ship > fridayEnd) future = true;
         });
       }
+      // KPI-dagfilter: licht de ECHTE verzenddatums op van alle orders in de geselecteerde tegel(s)
+      var kpiDayset = {};
+      if (hasKpi){
+        var ks = window.__rcKpiSets, kp = window.__rcKpiShip;
+        if (ks && kp){
+          kpi.forEach(function(key){
+            var so = ks[key]; if (!so) return;
+            Object.keys(so).forEach(function(pid){ var s = kp[pid]; if (s) kpiDayset[dkey(new Date(s))] = 1; });
+          });
+        }
+      }
       document.querySelectorAll('#tab-vandaag .kpi-grid .kpi-day').forEach(function(tile){
         var m = (tile.getAttribute('onclick') || '').match(/setKpiFilter\('([^']+)'/); if (!m) return;
         var key = m[1];
@@ -4692,7 +4703,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       document.querySelectorAll('#kalenderCard .kal-cell').forEach(function(cell){
         var m = (cell.getAttribute('onclick') || '').match(/setKpiFilter\('([^']+)'/); if (!m) return;
         var key = m[1];
-        if (dayset[key] || kfHas(key)) cell.classList.add('rc-ship-hl');
+        if (dayset[key] || kpiDayset[key]) cell.classList.add('rc-ship-hl');
       });
     } catch(e){ console.warn('[RC] ship highlight', e); }
   }
@@ -4773,6 +4784,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         if (ship > fridayEnd) sets.future[p.project] = 1;
         var k = localDateKey(ship); if (sets[k]) sets[k][p.project] = 1;
       });
+      window.__rcKpiSets = sets; window.__rcKpiShip = pm;
       function isFin(pid){ var s = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || ''; return /^finished\s/i.test(s); }
       var nf = (typeof fmtNum === 'function') ? fmtNum : function(x){ return x; };
       grid.querySelectorAll('.kpi-day').forEach(function(tile){
