@@ -3526,6 +3526,8 @@ window.addEventListener('DOMContentLoaded', async function(){
         }
       } catch(e){ console.warn('[RC] order-finished verwerkt', e); }
     })();
+    // OTIF per dag (2e datastroom, los van bovenstaande sweep) - fire-and-forget
+    try { rcComputeOtif(); } catch(e){ console.warn('[RC] OTIF start', e); }
     rcEnrichAccountStatus();
 
     var dayMs = 86400000;
@@ -4092,6 +4094,157 @@ window.addEventListener('DOMContentLoaded', async function(){
     } catch(e){ console.warn('[RC] bezetting', e); }
   }
 
+  // ===================== OTIF (Leveringsbetrouwbaarheid) =====================
+  // Canoniek (RC OTIF-doc): eenheid = per order.
+  //  ship-datum = dag van het EERSTE 'Finished [Operator]'-event uit de activity-log
+  //  deadline   = MAX(shippingDeadline) over alle parts van de order
+  //  on_time    = ship <= deadline (kalenderdag)  ->  early (<) / on-time (=) / late (>)
+  //  in_full    = precies 1 unieke Finished-kalenderdag
+  //  otif       = (early||on-time) && in_full
+  //  uitsluiten = huidige orderstatus 'Cancelled' (op statusniveau, niet uit activity),
+  //               of geen deadline / geen ship-datum.
+  // Draait in de 2e datastroom (fire-and-forget). Bucket per ship-datum -> __rcOtifByDay.
+  var RC_OTIF_FIN_RE = /^Finished [A-Za-z]+$/;
+  var RC_OTIF_FINORLATER_RE = /finished|invoice|verzonden|shipped|on shelf|ready for shipment|checked/i;
+  function rcOtifDayKey(d){ d = new Date(d); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  async function rcComputeOtif(){
+    try {
+      var t = getToken(); if (!t) return;
+      var H = { Authorization: t, Accept: 'application/json' };
+      var CAL_BACK = 24;                       // ship-venster in kalenderdagen (dekt ~17 werkdagen)
+      var CREATE_BACK = 75;                    // orderCreatedAt-venster voor deadlines + kandidaten
+      var todayKey = rcOtifDayKey(new Date());
+      var minShip = new Date(Date.now() - CAL_BACK*86400000); minShip.setHours(0,0,0,0);
+      var recentCut = new Date(Date.now() - (CAL_BACK+9)*86400000);   // updatedAt-ondergrens
+      var fromCreate = new Date(Date.now() - CREATE_BACK*86400000).toISOString();
+
+      // 1) deadline per project = MAX(shippingDeadline) uit ticket-model/project (part-rijen)
+      var maxShipByProject = {};
+      for (var off=0, pg=0; pg<25; off+=200, pg++){
+        var q = 'limit=200&offset='+off+'&sort.direction=desc&sort.by=orderCreatedAt&timezone=2&stateFilters=%7B%7D&search.filter=&from.orderCreatedAt='+encodeURIComponent('"'+fromCreate+'"');
+        var resp = await fetch('/management-service/api/v1/ticket-model/project?'+q, { headers: H });
+        if (!resp.ok) break;
+        var data = await resp.json();
+        var rows = Array.isArray(data) ? data : (data.rows || []);
+        rows.forEach(function(r){
+          var pid = r.projectId; if (!pid || !r.shippingDeadline) return;
+          var sd = new Date(r.shippingDeadline);
+          if (!maxShipByProject[pid] || sd > maxShipByProject[pid]) maxShipByProject[pid] = sd;
+        });
+        if (rows.length < 200) break;
+      }
+
+      // 2) kandidaten uit ticket/projects (order-niveau): finished-of-later, niet Cancelled,
+      //    recent gewijzigd. Bevat communicationId (nodig voor de activity-log).
+      var candidates = [];
+      for (var o2=0, p2=0; p2<12; o2+=500, p2++){
+        var q2 = 'limit=500&offset='+o2+'&sort.direction=desc&sort.by=orderCreatedAt&timezone=2&stateFilters=%7B%7D&search.filter=&from.orderCreatedAt='+encodeURIComponent('"'+fromCreate+'"');
+        var r2 = await fetch('/management-service/api/v1/ticket/projects?'+q2, { headers: H });
+        if (!r2.ok) break;
+        var d2 = await r2.json();
+        var rows2 = d2.rows || [];
+        rows2.forEach(function(r){
+          var st = r.ticketStatusName || '';
+          if (/cancelled/i.test(st)) return;                 // huidige status Cancelled -> uitsluiten
+          if (!RC_OTIF_FINORLATER_RE.test(st)) return;       // nog niet (aantoonbaar) verzonden
+          if (!r.communicationId || !r.projectId) return;
+          if (r.updatedAt && new Date(r.updatedAt) < recentCut) return;   // niet recent -> overslaan
+          candidates.push({ pid: r.projectId, cid: r.communicationId });
+        });
+        if (rows2.length < 500) break;
+      }
+
+      // 3) per kandidaat de activity-log (klein met ?type=TICKET_STATUS_CHANGED) -> ship + in_full
+      var byDay = {};
+      function bump(k, cls, otif, inFull){
+        var b = byDay[k] || (byDay[k] = { n:0, otif:0, early:0, onTime:0, late:0, inFull:0 });
+        b.n++; b[cls]++; if (otif) b.otif++; if (inFull) b.inFull++;
+      }
+      await concurrent(candidates, 6, async function(c){
+        try {
+          var deadline = maxShipByProject[c.pid]; if (!deadline) return;
+          var ar = await fetch('/communication-service/api/v1/communication/'+c.cid+'/activity?type=TICKET_STATUS_CHANGED', { headers: H });
+          if (!ar.ok) return;
+          var ev = await ar.json(); if (!Array.isArray(ev)) return;
+          var finDays = [];
+          ev.forEach(function(e){
+            if (e.type !== 'TICKET_STATUS_CHANGED') return;
+            var sm = (e.entities && e.entities.ticketStatus) || {};
+            var nsId = e.data && e.data.newStatusId;
+            var ns = sm[nsId] && sm[nsId].name;
+            if (ns && RC_OTIF_FIN_RE.test(ns)) finDays.push(new Date(e.createdAt));
+          });
+          if (!finDays.length) return;
+          finDays.sort(function(a,b){ return a - b; });
+          var ship = finDays[0];
+          if (ship < minShip) return;                         // buiten weergavevenster
+          var shipKey = rcOtifDayKey(ship);
+          if (shipKey > todayKey) return;
+          var uniq = {}; finDays.forEach(function(d){ uniq[rcOtifDayKey(d)] = 1; });
+          var inFull = Object.keys(uniq).length === 1;
+          var shipD = startOfDay(ship), dlD = startOfDay(deadline);
+          var cls = shipD < dlD ? 'early' : (shipD.getTime() === dlD.getTime() ? 'onTime' : 'late');
+          var otif = (shipD <= dlD) && inFull;
+          bump(shipKey, cls, otif, inFull);
+        } catch(e){}
+      });
+      window.__rcOtifByDay = byDay;
+      if (window.Chart && window.Chart.getChart && window.Chart.getChart('drukteOrders')
+          && typeof window.renderDrukteCharts === 'function'){
+        window.renderDrukteCharts();
+      }
+    } catch(e){ console.warn('[RC] OTIF compute', e); }
+  }
+  // Globaal geregistreerde Chart-plugin; alleen actief op de 'drukteOrders'-canvas.
+  // Tekent per afgelopen/vandaag-dagkolom een Early/On-Time/Late-segmentbalkje + OTIF% bovenin.
+  function rcRegisterOtifPlugin(){
+    if (window.__rcOtifPluginReg || !window.Chart || typeof window.Chart.register !== 'function') return;
+    window.Chart.register({
+      id: 'rcOtifDayLabels',
+      afterDatasetsDraw: function(c){
+        try {
+          if (!c.canvas || c.canvas.id !== 'drukteOrders') return;
+          if (!window.__rcOtifByDay) return;             // nog niet berekend -> niets tekenen
+          var keys = window.__rcDrukteDayKeys, data = window.__rcOtifByDay;
+          if (!keys || !keys.length) return;
+          var xs = c.scales.x, ys = c.scales.y; if (!xs || !ys) return;
+          var cx = c.ctx;
+          var todayKey = rcOtifDayKey(new Date());
+          var half = Math.abs(xs.getPixelForValue(1) - xs.getPixelForValue(0)) / 2 || 14;
+          var barW = Math.max(10, Math.min(half * 1.4, 30));
+          var segY = ys.top + 3, segH = 5;
+          cx.save();
+          keys.forEach(function(k, i){
+            if (k > todayKey) return;                       // toekomst: niets
+            var x = xs.getPixelForValue(i);
+            var rec = data[k];
+            if (!rec || !rec.n){
+              cx.fillStyle = '#5A6B78'; cx.font = '700 9px Roboto';
+              cx.textAlign = 'center'; cx.textBaseline = 'top';
+              cx.fillText('—', x, segY + 1);
+              return;
+            }
+            var n = rec.n, pct = Math.round((rec.otif / n) * 100);
+            var x0 = x - barW / 2, cursor = x0;
+            [['#F59E0B', rec.early], ['#22C55E', rec.onTime], ['#EF4444', rec.late]].forEach(function(s){
+              if (!s[1]) return; var sw = barW * (s[1] / n);
+              cx.fillStyle = s[0]; cx.fillRect(cursor, segY, sw, segH); cursor += sw;
+            });
+            cx.strokeStyle = 'rgba(255,255,255,.18)'; cx.lineWidth = 0.5;
+            cx.strokeRect(x0, segY, barW, segH);
+            var isToday = (k === todayKey);
+            cx.fillStyle = pct >= 95 ? '#22C55E' : (pct >= 85 ? '#F59E0B' : '#EF4444');
+            cx.globalAlpha = isToday ? 0.75 : 1;
+            cx.font = '800 10px Roboto'; cx.textAlign = 'center'; cx.textBaseline = 'top';
+            cx.fillText(pct + '%' + (isToday ? '*' : ''), x, segY + segH + 2);
+            cx.globalAlpha = 1;
+          });
+          cx.restore();
+        } catch(e){}
+      }
+    });
+    window.__rcOtifPluginReg = true;
+  }
   function rcAddFinishedDatasetToDrukte(){
     var chart = null;
     try {
@@ -4115,6 +4268,8 @@ window.addEventListener('DOMContentLoaded', async function(){
     }
     function dkey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     var dayKeys = workdays.map(dkey);
+    window.__rcDrukteDayKeys = dayKeys;            // voor de OTIF-per-dag plugin
+    try { rcRegisterOtifPlugin(); } catch(e){}
     // Groene lijn = orders met ORDER-status 'Finished xxx', per dag - zelfde bucketing
     // als de blauwe lijn (projectMaxShip = hoogste shipping over open parts).
     var openParts = getOpenParts() || [];
@@ -4247,9 +4402,18 @@ window.addEventListener('DOMContentLoaded', async function(){
         if (!items || !items.length) return '';
         var key = _keys[items[0].dataIndex];
         var list = (_det && _det[key]) || [];
-        if (!list.length) return '';
+        var otifLines = [];
+        try {
+          var _od = (window.__rcOtifByDay || {})[key];
+          if (_od && _od.n){
+            var _pct = Math.round((_od.otif / _od.n) * 100);
+            otifLines = ['', 'OTIF ' + _pct + '%  (in full ' + _od.inFull + '/' + _od.n + ')',
+              _od.n + ' verzonden · ' + (_od.early||0) + ' early · ' + (_od.onTime||0) + ' on-time · ' + (_od.late||0) + ' late'];
+          }
+        } catch(e){}
+        if (!list.length) return otifLines;
         var MAX = 12;
-        var lines = ['', 'Finished:'];
+        var lines = otifLines.concat(['', 'Finished:']);
         list.slice(0, MAX).forEach(function(o){
           lines.push('• ' + o.pid + (o.company ? '  ·  ' + o.company : ''));
         });
