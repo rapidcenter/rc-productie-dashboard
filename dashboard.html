@@ -4327,6 +4327,8 @@ window.addEventListener('DOMContentLoaded', async function(){
       var _rtNow = new Date(), _ovSeen = {}, _ovList = [];
       openParts.forEach(function(p){
         var pid = p.project; if (!pid || _ovSeen[pid]) return;
+        var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
+        if (/finished|invoice|verzonden|shipped|on shelf|checked/i.test(_st)) return;  // al de deur uit -> niet 'te laat openstaand'
         var sh = pm[pid]; if (!sh) return;
         if (rcWdLate(new Date(sh), _rtNow) >= 0){ _ovSeen[pid] = 1; _ovList.push({ pid: pid, company: p.company || '' }); }
       });
@@ -5027,6 +5029,8 @@ window.addEventListener('DOMContentLoaded', async function(){
         getOpenParts().forEach(function(p){
           var pid = p.project; if (!pid || _ovSeen2[pid]) return;
           if (isOrderHidden(pid) || !rcPassWsFilter(pid)) return;
+          var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
+          if (/finished|invoice|verzonden|shipped|on shelf|checked/i.test(_st)) return;  // al de deur uit -> niet 'te laat openstaand'
           var ship = pm[pid] || p.shipping; if (!ship) return;
           if (rcWdLate(new Date(ship), _rt2) >= 0){ _ovSeen2[pid] = 1; _ovCnt++; }
         });
