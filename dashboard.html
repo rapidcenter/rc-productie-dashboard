@@ -4138,8 +4138,8 @@ window.addEventListener('DOMContentLoaded', async function(){
 
       // 1) deadline per project = MAX(shippingDeadline) uit ticket-model/project (part-rijen)
       var maxShipByProject = {};
-      for (var off=0, pg=0; pg<25; off+=200, pg++){
-        var q = 'limit=200&offset='+off+'&sort.direction=desc&sort.by=orderCreatedAt&timezone=2&stateFilters=%7B%7D&search.filter=&from.orderCreatedAt='+encodeURIComponent('"'+fromCreate+'"');
+      for (var off=0, pg=0; pg<12; off+=500, pg++){
+        var q = 'limit=500&offset='+off+'&sort.direction=desc&sort.by=orderCreatedAt&timezone=2&stateFilters=%7B%7D&search.filter=&from.orderCreatedAt='+encodeURIComponent('"'+fromCreate+'"');
         var resp = await fetch('/management-service/api/v1/ticket-model/project?'+q, { headers: H });
         if (!resp.ok) break;
         var data = await resp.json();
@@ -4149,7 +4149,7 @@ window.addEventListener('DOMContentLoaded', async function(){
           var sd = new Date(r.shippingDeadline);
           if (!maxShipByProject[pid] || sd > maxShipByProject[pid]) maxShipByProject[pid] = sd;
         });
-        if (rows.length < 200) break;
+        if (rows.length < 500) break;
       }
 
       // 2) kandidaten uit ticket/projects (order-niveau): finished-of-later, niet Cancelled,
@@ -4177,7 +4177,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         var b = byDay[k] || (byDay[k] = { n:0, otif:0, early:0, onTime:0, late:0, inFull:0 });
         b.n++; b[cls]++; if (otif) b.otif++; if (inFull) b.inFull++;
       }
-      await concurrent(candidates, 6, async function(c){
+      await concurrent(candidates, 14, async function(c){
         try {
           var deadline = maxShipByProject[c.pid]; if (!deadline) return;
           var ar = await fetch('/communication-service/api/v1/communication/'+c.cid+'/activity?type=TICKET_STATUS_CHANGED', { headers: H });
@@ -5021,6 +5021,17 @@ window.addEventListener('DOMContentLoaded', async function(){
         if (!p.shipping || isOrderHidden(p.project)) return;
         if (!pm[p.project] || p.shipping > pm[p.project]) pm[p.project] = p.shipping;
       });
+      // Overdue-open voor de vandaag-tegel (zelfde regel als de grafiek): open orders met deadline <= vandaag (werkdag)
+      try {
+        var _ovSeen2 = {}, _ovCnt = 0, _rt2 = new Date();
+        getOpenParts().forEach(function(p){
+          var pid = p.project; if (!pid || _ovSeen2[pid]) return;
+          if (isOrderHidden(pid) || !rcPassWsFilter(pid)) return;
+          var ship = pm[pid] || p.shipping; if (!ship) return;
+          if (rcWdLate(new Date(ship), _rt2) >= 0){ _ovSeen2[pid] = 1; _ovCnt++; }
+        });
+        window.__rcOtifOverdueToday = _ovCnt;
+      } catch(e){}
       var sets = { backlog:{}, future:{} };
       days.forEach(function(d){ sets[localDateKey(d)] = {}; });
       getOpenParts().forEach(function(p){
