@@ -4235,24 +4235,27 @@ window.addEventListener('DOMContentLoaded', async function(){
           keys.forEach(function(k, i){
             if (k > todayKey) return;                       // toekomst: niets
             var x = xs.getPixelForValue(i);
-            var rec = data[k];
-            if (!rec || !rec.n){
+            var isToday = (k === todayKey);
+            var rec = data[k] || { n:0, otif:0, early:0, onTime:0, late:0, inFull:0 };
+            var overdue = isToday ? (window.__rcOtifOverdueToday || 0) : 0;   // te-laat openstaand telt vandaag mee
+            var n = rec.n + overdue;
+            if (!n){
               cx.fillStyle = '#5A6B78'; cx.font = '700 14px Roboto';
               cx.textAlign = 'center'; cx.textBaseline = 'top';
               cx.fillText('—', x, segY + 1);
               return;
             }
-            var n = rec.n, pct = Math.round((rec.otif / n) * 100);
+            var lateCnt = (rec.late || 0) + overdue;
+            var pct = Math.round((rec.otif / n) * 100);
             var x0 = x - barW / 2, cursor = x0;
-            [['#F59E0B', rec.early], ['#22C55E', rec.onTime], ['#EF4444', rec.late]].forEach(function(s){
+            [['#F59E0B', rec.early], ['#22C55E', rec.onTime], ['#EF4444', lateCnt]].forEach(function(s){
               if (!s[1]) return; var sw = barW * (s[1] / n);
               cx.fillStyle = s[0]; cx.fillRect(cursor, segY, sw, segH); cursor += sw;
             });
             cx.strokeStyle = 'rgba(255,255,255,.18)'; cx.lineWidth = 0.5;
             cx.strokeRect(x0, segY, barW, segH);
-            var isToday = (k === todayKey);
             cx.fillStyle = pct >= 95 ? '#22C55E' : (pct >= 85 ? '#F59E0B' : '#EF4444');
-            cx.globalAlpha = isToday ? 0.75 : 1;
+            cx.globalAlpha = isToday ? 0.85 : 1;
             cx.font = '800 15px Roboto'; cx.textAlign = 'center'; cx.textBaseline = 'top';
             cx.fillText(pct + '%' + (isToday ? '*' : ''), x, segY + segH + 2);
             cx.globalAlpha = 1;
@@ -4315,6 +4318,18 @@ window.addEventListener('DOMContentLoaded', async function(){
       if (!p.shipping) return;
       if (!pm[p.project] || p.shipping > pm[p.project]) pm[p.project] = p.shipping;
     });
+    // Overdue: open orders waarvan de deadline vandaag óf al verstreken is (nog niet verzonden)
+    // -> tellen live als 'te laat' voor vandaag (wd_late >= 0 = deadline <= vandaag, werkdag-basis)
+    try {
+      var _rtNow = new Date(), _ovSeen = {}, _ovList = [];
+      openParts.forEach(function(p){
+        var pid = p.project; if (!pid || _ovSeen[pid]) return;
+        var sh = pm[pid]; if (!sh) return;
+        if (rcWdLate(new Date(sh), _rtNow) >= 0){ _ovSeen[pid] = 1; _ovList.push({ pid: pid, company: p.company || '' }); }
+      });
+      window.__rcOtifOverdueToday = _ovList.length;
+      window.__rcOtifOverdueList = _ovList;
+    } catch(e){ window.__rcOtifOverdueToday = 0; }
     var ORDST = (typeof ORDER_STATUS_MAP !== 'undefined') ? ORDER_STATUS_MAP : {};
     function _isFin(pid){ return /^finished\s/i.test(ORDST[pid] || ''); }
     // Metric-toggle: 'orders' | 'parts' | <materiaalnaam>. Bepaalt wat de staven tellen.
@@ -4441,11 +4456,16 @@ window.addEventListener('DOMContentLoaded', async function(){
         var list = (_det && _det[key]) || [];
         var otifLines = [];
         try {
-          var _od = (window.__rcOtifByDay || {})[key];
-          if (_od && _od.n){
-            var _pct = Math.round((_od.otif / _od.n) * 100);
-            otifLines = ['', 'OTIF ' + _pct + '%  (in full ' + _od.inFull + '/' + _od.n + ')',
-              _od.n + ' verzonden · ' + (_od.early||0) + ' early · ' + (_od.onTime||0) + ' on-time · ' + (_od.late||0) + ' late'];
+          var _od = (window.__rcOtifByDay || {})[key] || { n:0, otif:0, early:0, onTime:0, late:0, inFull:0 };
+          var _todK = (function(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+          var _ov = (key === _todK) ? (window.__rcOtifOverdueToday || 0) : 0;
+          var _n = _od.n + _ov;
+          if (_n){
+            var _pct = Math.round((_od.otif / _n) * 100);
+            var _late = (_od.late || 0) + _ov;
+            otifLines = ['', 'OTIF ' + _pct + '%  (in full ' + _od.inFull + '/' + _n + ')',
+              _n + ' orders · ' + (_od.early||0) + ' early · ' + (_od.onTime||0) + ' on-time · ' + _late + ' late'
+              + (_ov ? '  (' + _ov + ' te laat openstaand)' : '')];
           }
         } catch(e){}
         if (!list.length) return otifLines;
