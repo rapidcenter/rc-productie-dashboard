@@ -3044,6 +3044,8 @@ window.addEventListener('DOMContentLoaded', async function(){
   #listRows .order-num.rc-order-link:hover { text-decoration:underline; color:var(--rc-blue) }
   .kpi-day-parts .rc-fin-note { font-size:13px; font-weight:700; color:#7AB11B; letter-spacing:0 }
   .kpi-day .rc-kpi-lt { font-size:9.5px; color:var(--ink3); font-weight:600; margin-top:3px; line-height:1.3; letter-spacing:.02em }
+  .kpi-day .rc-kpi-otif { font-size:11px; color:var(--ink3); font-weight:600; margin-top:4px; letter-spacing:.02em }
+  .kpi-day .rc-kpi-otif b { font-weight:800; font-variant-numeric:tabular-nums }
   .kal-cell .kc-cnt .kc-fin { color:#7AB11B; margin-left:3px; font-weight:700 }
   .kal-cell.active .kc-cnt .kc-fin { color:#fff }
   .kpi-day.rc-ship-hl, .kal-cell.rc-ship-hl { box-shadow: inset 0 0 0 2px #F59E0B, 0 0 9px rgba(245,158,11,.5) !important; border-color:#F59E0B !important }
@@ -4211,6 +4213,7 @@ window.addEventListener('DOMContentLoaded', async function(){
           && typeof window.renderDrukteCharts === 'function'){
         window.renderDrukteCharts();
       }
+      try { rcRewriteKpiFinished(); } catch(e){}   // OTIF ook in de dag-tegels bijwerken
     } catch(e){ console.warn('[RC] OTIF compute', e); }
   }
   // Globaal geregistreerde Chart-plugin; alleen actief op de 'drukteOrders'-canvas.
@@ -5053,6 +5056,22 @@ window.addEventListener('DOMContentLoaded', async function(){
           if (!_ltEl){ _ltEl = document.createElement('div'); _ltEl.className = 'rc-kpi-lt'; partsEl.parentNode.insertBefore(_ltEl, partsEl.nextSibling); }
           _ltEl.textContent = _txt;
         } else if (_ltEl){ _ltEl.remove(); }
+        // OTIF% in de dag-tegel (huidige + verstreken dagen; ship-based, vandaag incl. te-laat-openstaand)
+        var _otEl = tile.querySelector('.rc-kpi-otif');
+        var _todayK = localDateKey(new Date());
+        if (/^\d{4}-\d{2}-\d{2}$/.test(m[1]) && m[1] <= _todayK){
+          var _od = (window.__rcOtifByDay || {})[m[1]];
+          var _ov = (m[1] === _todayK) ? (window.__rcOtifOverdueToday || 0) : 0;
+          var _on = (_od ? _od.n : 0) + _ov;
+          if (_on){
+            var _op = Math.round((_od ? _od.otif : 0) / _on * 100);
+            var _oc = _op >= 95 ? '#22C55E' : (_op >= 85 ? '#F59E0B' : '#EF4444');
+            if (!_otEl){ _otEl = document.createElement('div'); _otEl.className = 'rc-kpi-otif';
+              if (_ltEl && _ltEl.parentNode){ _ltEl.parentNode.insertBefore(_otEl, _ltEl.nextSibling); }
+              else { partsEl.parentNode.insertBefore(_otEl, partsEl.nextSibling); } }
+            _otEl.innerHTML = 'OTIF <b style="color:' + _oc + '">' + _op + '%' + (m[1] === _todayK ? '*' : '') + '</b>';
+          } else if (_otEl){ _otEl.remove(); }
+        } else if (_otEl){ _otEl.remove(); }
       });
     } catch(e){ console.warn('[RC] kpi finished', e); }
   }
