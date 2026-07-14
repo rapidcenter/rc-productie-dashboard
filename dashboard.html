@@ -4211,15 +4211,15 @@ window.addEventListener('DOMContentLoaded', async function(){
           var cx = c.ctx;
           var todayKey = rcOtifDayKey(new Date());
           var half = Math.abs(xs.getPixelForValue(1) - xs.getPixelForValue(0)) / 2 || 14;
-          var barW = Math.max(10, Math.min(half * 1.4, 30));
-          var segY = ys.top + 3, segH = 5;
+          var barW = Math.max(15, Math.min(half * 1.4, 45));
+          var segY = ys.top + 3, segH = 8;
           cx.save();
           keys.forEach(function(k, i){
             if (k > todayKey) return;                       // toekomst: niets
             var x = xs.getPixelForValue(i);
             var rec = data[k];
             if (!rec || !rec.n){
-              cx.fillStyle = '#5A6B78'; cx.font = '700 9px Roboto';
+              cx.fillStyle = '#5A6B78'; cx.font = '700 14px Roboto';
               cx.textAlign = 'center'; cx.textBaseline = 'top';
               cx.fillText('—', x, segY + 1);
               return;
@@ -4235,7 +4235,7 @@ window.addEventListener('DOMContentLoaded', async function(){
             var isToday = (k === todayKey);
             cx.fillStyle = pct >= 95 ? '#22C55E' : (pct >= 85 ? '#F59E0B' : '#EF4444');
             cx.globalAlpha = isToday ? 0.75 : 1;
-            cx.font = '800 10px Roboto'; cx.textAlign = 'center'; cx.textBaseline = 'top';
+            cx.font = '800 15px Roboto'; cx.textAlign = 'center'; cx.textBaseline = 'top';
             cx.fillText(pct + '%' + (isToday ? '*' : ''), x, segY + segH + 2);
             cx.globalAlpha = 1;
           });
