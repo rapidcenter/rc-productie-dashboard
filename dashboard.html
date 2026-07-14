@@ -4239,6 +4239,25 @@ window.addEventListener('DOMContentLoaded', async function(){
             cx.fillText(pct + '%' + (isToday ? '*' : ''), x, segY + segH + 2);
             cx.globalAlpha = 1;
           });
+          // OTIF per week (alleen %) rechts naast het WEEK-label
+          var isoW = function(dd){ dd=new Date(dd); var tt=new Date(Date.UTC(dd.getFullYear(),dd.getMonth(),dd.getDate())); var dn=(tt.getUTCDay()+6)%7; tt.setUTCDate(tt.getUTCDate()-dn+3); var ff=new Date(Date.UTC(tt.getUTCFullYear(),0,4)); return 1+Math.round(((tt-ff)/86400000-3+((ff.getUTCDay()+6)%7))/7); };
+          var wk = {};
+          keys.forEach(function(k, i){
+            var wn = isoW(k);
+            var g = wk[wn] || (wk[wn] = { wn: wn, start: i, end: i, n: 0, otif: 0 });
+            g.end = i;
+            if (k <= todayKey){ var rc = data[k]; if (rc && rc.n){ g.n += rc.n; g.otif += rc.otif; } }
+          });
+          Object.keys(wk).forEach(function(key){
+            var g = wk[key]; if (!g.n) return;
+            var xMid = (xs.getPixelForValue(g.start) + xs.getPixelForValue(g.end)) / 2;
+            var wpct = Math.round(g.otif / g.n * 100);
+            cx.font = '700 9.5px Roboto';
+            var pillW = cx.measureText('WEEK ' + g.wn).width + 12;
+            cx.font = '800 12px Roboto'; cx.textAlign = 'left'; cx.textBaseline = 'middle';
+            cx.fillStyle = wpct >= 95 ? '#22C55E' : (wpct >= 85 ? '#F59E0B' : '#EF4444');
+            cx.fillText(wpct + '%', xMid + pillW / 2 + 6, ys.top - 30);
+          });
           cx.restore();
         } catch(e){}
       }
