@@ -4383,7 +4383,7 @@ window.addEventListener('DOMContentLoaded', async function(){
     chart.data.datasets = chart.data.datasets.filter(function(ds){
       var l = String(ds.label || '');
       return l !== 'Aantal orders' && l !== 'Verwerkt' && l !== 'Finished'
-        && l !== '_lttot' && l.indexOf('Gem.') !== 0 && _LT_ORDER.indexOf(l) < 0;
+        && l !== '_lttot' && l !== 'OTIF %' && l.indexOf('Gem.') !== 0 && _LT_ORDER.indexOf(l) < 0;
     });
     chart.data.datasets.unshift({
       type: 'line', label: '_lttot', data: openTot, yAxisID: 'y1',
@@ -4405,6 +4405,24 @@ window.addEventListener('DOMContentLoaded', async function(){
         pointBackgroundColor: '#7AB11B', pointBorderColor: '#7AB11B', fill: false, tension: 0.35, order: 1,
         datalabels: { color: '#7AB11B', font: { weight: 'bold', size: 10 }, align: 'top', offset: 4,
           formatter: function(v){ return (v && v > 0) ? v : ''; } }
+      });
+      // Paarse OTIF%-lijn (eigen as y2: 0% onder, 100% bovenin de grafiek). Zelfde stijl als de Finished-lijn.
+      var _otTodayK = dkey(new Date());
+      var _otifPct = dayKeys.map(function(k){
+        if (k > _otTodayK) return null;                          // toekomst
+        var _r = (window.__rcOtifByDay || {})[k];
+        var _o = (k === _otTodayK) ? (window.__rcOtifOverdueToday || 0) : 0;
+        var _nn = (_r ? _r.n : 0) + _o;
+        if (!_nn) return null;                                   // geen shipments -> gat
+        return Math.round((_r ? _r.otif : 0) / _nn * 100);
+      });
+      chart.data.datasets.push({
+        type: 'line', label: 'OTIF %', data: _otifPct, yAxisID: 'y2',
+        borderColor: '#A855F7', backgroundColor: 'rgba(168,85,247,0.10)',
+        borderDash: [6, 4], borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+        pointBackgroundColor: '#A855F7', pointBorderColor: '#A855F7',
+        fill: false, tension: 0.35, spanGaps: true, order: 1,
+        datalabels: { display: false }
       });
     }
     try {
@@ -4439,6 +4457,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         _o2.scales.x = Object.assign({}, _o2.scales.x || {}, { stacked: true });
         _o2.scales.y = Object.assign({}, _o2.scales.y || {}, { stacked: true, beginAtZero: true, max: _niceMax });
         _o2.scales.y1 = { position: 'left', display: false, stacked: false, beginAtZero: true, min: 0, max: _niceMax, grid: { drawOnChartArea: false } };
+        _o2.scales.y2 = { position: 'right', display: false, stacked: false, beginAtZero: true, min: 0, max: 100, grid: { drawOnChartArea: false } };  // OTIF%-lijn: 100% = bovenkant
         _o2.plugins = _o2.plugins || {};
         _o2.plugins.legend = _o2.plugins.legend || {};
         _o2.plugins.legend.labels = Object.assign({}, _o2.plugins.legend.labels || {}, { filter: function(it){ return it.text !== '_lttot'; } });
