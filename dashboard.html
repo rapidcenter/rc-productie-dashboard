@@ -4467,7 +4467,8 @@ window.addEventListener('DOMContentLoaded', async function(){
         _o2.scales.x = Object.assign({}, _o2.scales.x || {}, { stacked: true });
         _o2.scales.y = Object.assign({}, _o2.scales.y || {}, { stacked: true, beginAtZero: true, max: _niceMax });
         _o2.scales.y1 = { position: 'left', display: false, stacked: false, beginAtZero: true, min: 0, max: _niceMax, grid: { drawOnChartArea: false } };
-        _o2.scales.y2 = { position: 'right', display: false, stacked: false, beginAtZero: true, min: 0, max: 100, grid: { drawOnChartArea: false } };  // OTIF%-lijn: 100% = bovenkant
+        var _otifAxisMax = 100 * _niceMax / Math.max(_maxVal, 1);   // 100% lijnt met de hoogste staaf -> ruimte erboven voor de labels
+        _o2.scales.y2 = { position: 'right', display: false, stacked: false, beginAtZero: true, min: 0, max: _otifAxisMax, grid: { drawOnChartArea: false } };  // OTIF%-lijn: 100% = max aantal orders
         _o2.plugins = _o2.plugins || {};
         _o2.plugins.legend = _o2.plugins.legend || {};
         _o2.plugins.legend.labels = Object.assign({}, _o2.plugins.legend.labels || {}, { filter: function(it){ return it.text !== '_lttot'; } });
