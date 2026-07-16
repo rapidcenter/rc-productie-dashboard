@@ -4195,17 +4195,15 @@ window.addEventListener('DOMContentLoaded', async function(){
           if (!finDays.length) return;
           finDays.sort(function(a,b){ return a - b; });
           var ship = finDays[0];
-          var wknd = ship.getDay();
-          if (wknd === 0 || wknd === 6) return;               // weekend-verzending uitsluiten (canoniek)
-          if (ship < minShip) return;                         // buiten weergavevenster
-          var shipKey = rcOtifDayKey(ship);
-          if (shipKey > todayKey) return;
+          if (deadline < minShip) return;                     // deadline buiten weergavevenster
+          var dlKey = rcOtifDayKey(deadline);                 // boeken op de DEADLINE-dag (beloofde dag)
+          if (dlKey > todayKey) return;                       // deadline in de toekomst -> nog niet 'due'
           var uniq = {}; finDays.forEach(function(d){ uniq[rcOtifDayKey(d)] = 1; });
           var inFull = Object.keys(uniq).length === 1;
-          var latewd = rcWdLate(deadline, ship);              // werkdagen te laat (canoniek)
+          var latewd = rcWdLate(deadline, ship);              // werkdagen te laat
           var cls = latewd < 0 ? 'early' : (latewd === 0 ? 'onTime' : 'late');
           var otif = (latewd <= 0) && inFull;
-          bump(shipKey, cls, otif, inFull);
+          bump(dlKey, cls, otif, inFull);
         } catch(e){}
       });
       window.__rcOtifByDay = byDay;
