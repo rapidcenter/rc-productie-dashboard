@@ -4240,7 +4240,7 @@ window.addEventListener('DOMContentLoaded', async function(){
             var x = xs.getPixelForValue(i);
             var isToday = (k === todayKey);
             var rec = data[k] || { n:0, otif:0, early:0, onTime:0, late:0, inFull:0 };
-            var overdue = isToday ? (window.__rcOtifOverdueToday || 0) : 0;   // te-laat openstaand telt vandaag mee
+            var overdue = (window.__rcOtifOverdueByDay || {})[k] || 0;   // te-laat openstaand telt op z'n deadline-dag
             var n = rec.n + overdue;
             if (!n){
               cx.fillStyle = '#5A6B78'; cx.font = '700 14px Roboto';
@@ -4321,20 +4321,19 @@ window.addEventListener('DOMContentLoaded', async function(){
       if (!p.shipping) return;
       if (!pm[p.project] || p.shipping > pm[p.project]) pm[p.project] = p.shipping;
     });
-    // Overdue: open orders waarvan de deadline vandaag óf al verstreken is (nog niet verzonden)
-    // -> tellen live als 'te laat' voor vandaag (wd_late >= 0 = deadline <= vandaag, werkdag-basis)
+    // Overdue: open orders (nog niet verzonden) met werkdag-deadline vandaag óf verstreken.
+    // Geboekt op hun DEADLINE-dag als 'te laat', zodat elke dag z'n eigen openstaande missers toont.
     try {
-      var _rtNow = new Date(), _ovSeen = {}, _ovList = [];
+      var _rtNow = new Date(), _ovSeen = {}, _ovByDay = {};
       openParts.forEach(function(p){
         var pid = p.project; if (!pid || _ovSeen[pid]) return;
         var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
         if (/finished|invoice|verzonden|shipped|on shelf|checked/i.test(_st)) return;  // al de deur uit -> niet 'te laat openstaand'
         var sh = pm[pid]; if (!sh) return;
-        if (rcWdLate(new Date(sh), _rtNow) >= 0){ _ovSeen[pid] = 1; _ovList.push({ pid: pid, company: p.company || '' }); }
+        if (rcWdLate(new Date(sh), _rtNow) >= 0){ _ovSeen[pid] = 1; var _dk = dkey(new Date(sh)); _ovByDay[_dk] = (_ovByDay[_dk] || 0) + 1; }
       });
-      window.__rcOtifOverdueToday = _ovList.length;
-      window.__rcOtifOverdueList = _ovList;
-    } catch(e){ window.__rcOtifOverdueToday = 0; }
+      window.__rcOtifOverdueByDay = _ovByDay;
+    } catch(e){ window.__rcOtifOverdueByDay = {}; }
     var ORDST = (typeof ORDER_STATUS_MAP !== 'undefined') ? ORDER_STATUS_MAP : {};
     function _isFin(pid){ return /^finished\s/i.test(ORDST[pid] || ''); }
     // Metric-toggle: 'orders' | 'parts' | <materiaalnaam>. Bepaalt wat de staven tellen.
@@ -4411,9 +4410,9 @@ window.addEventListener('DOMContentLoaded', async function(){
       var _otifPct = dayKeys.map(function(k){
         if (k > _otTodayK) return null;                          // toekomst
         var _r = (window.__rcOtifByDay || {})[k];
-        var _o = (k === _otTodayK) ? (window.__rcOtifOverdueToday || 0) : 0;
+        var _o = (window.__rcOtifOverdueByDay || {})[k] || 0;
         var _nn = (_r ? _r.n : 0) + _o;
-        if (!_nn) return null;                                   // geen shipments -> gat
+        if (!_nn) return null;                                   // geen data -> gat
         return Math.round((_r ? _r.otif : 0) / _nn * 100);
       });
       var _otifCol = _otifPct.map(function(v){ return v == null ? 'rgba(0,0,0,0)' : (v >= 95 ? '#22C55E' : (v >= 85 ? '#F59E0B' : '#EF4444')); });
@@ -4482,8 +4481,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         var otifLines = [];
         try {
           var _od = (window.__rcOtifByDay || {})[key] || { n:0, otif:0, early:0, onTime:0, late:0, inFull:0 };
-          var _todK = (function(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
-          var _ov = (key === _todK) ? (window.__rcOtifOverdueToday || 0) : 0;
+          var _ov = (window.__rcOtifOverdueByDay || {})[key] || 0;
           var _n = _od.n + _ov;
           if (_n){
             var _pct = Math.round((_od.otif / _n) * 100);
@@ -5045,16 +5043,16 @@ window.addEventListener('DOMContentLoaded', async function(){
       });
       // Overdue-open voor de vandaag-tegel (zelfde regel als de grafiek): open orders met deadline <= vandaag (werkdag)
       try {
-        var _ovSeen2 = {}, _ovCnt = 0, _rt2 = new Date();
+        var _ovSeen2 = {}, _ovByDay2 = {}, _rt2 = new Date();
         getOpenParts().forEach(function(p){
           var pid = p.project; if (!pid || _ovSeen2[pid]) return;
           if (isOrderHidden(pid) || !rcPassWsFilter(pid)) return;
           var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
           if (/finished|invoice|verzonden|shipped|on shelf|checked/i.test(_st)) return;  // al de deur uit -> niet 'te laat openstaand'
           var ship = pm[pid] || p.shipping; if (!ship) return;
-          if (rcWdLate(new Date(ship), _rt2) >= 0){ _ovSeen2[pid] = 1; _ovCnt++; }
+          if (rcWdLate(new Date(ship), _rt2) >= 0){ _ovSeen2[pid] = 1; var _dk2 = localDateKey(new Date(ship)); _ovByDay2[_dk2] = (_ovByDay2[_dk2] || 0) + 1; }
         });
-        window.__rcOtifOverdueToday = _ovCnt;
+        window.__rcOtifOverdueByDay = _ovByDay2;
       } catch(e){}
       var sets = { backlog:{}, future:{} };
       days.forEach(function(d){ sets[localDateKey(d)] = {}; });
@@ -5096,7 +5094,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         var _todayK = localDateKey(new Date());
         if (/^\d{4}-\d{2}-\d{2}$/.test(m[1]) && m[1] <= _todayK){
           var _od = (window.__rcOtifByDay || {})[m[1]];
-          var _ov = (m[1] === _todayK) ? (window.__rcOtifOverdueToday || 0) : 0;
+          var _ov = (window.__rcOtifOverdueByDay || {})[m[1]] || 0;
           var _on = (_od ? _od.n : 0) + _ov;
           if (_on){
             var _op = Math.round((_od ? _od.otif : 0) / _on * 100);
