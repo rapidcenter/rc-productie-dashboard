@@ -4203,14 +4203,12 @@ window.addEventListener('DOMContentLoaded', async function(){
           if (!finDays.length) return;
           finDays.sort(function(a,b){ return a - b; });
           var ship = finDays[0];
-          var _sw = ship.getDay();
-          if (_sw === 0 || _sw === 6) return;                 // weekend-verzending uitgesloten (canoniek OTIF_definitie §3.5)
           if (deadline < minShip) return;                     // deadline buiten weergavevenster
           var dlKey = rcOtifDayKey(deadline);                 // boeken op de DEADLINE-dag (beloofde dag)
           if (dlKey > todayKey) return;                       // deadline in de toekomst -> nog niet 'due'
-          var uniq = {}; finDays.forEach(function(d){ uniq[rcOtifDayKey(d)] = 1; });
-          var inFull = Object.keys(uniq).length === 1;
-          var latewd = rcWdLate(deadline, ship);              // werkdagen te laat
+          var lastFin = finDays[finDays.length - 1];          // laatste Finished-event (finDays oplopend gesorteerd)
+          var inFull = rcWdLate(deadline, lastFin) <= 0;      // In Full = geen Finished-event NA de deadline (pre-deadline splitsen = vooruitwerken, telt mee)
+          var latewd = rcWdLate(deadline, ship);              // werkdagen te laat (o.b.v. eerste Finished; voor early/on-time/late)
           var cls = latewd < 0 ? 'early' : (latewd === 0 ? 'onTime' : 'late');
           var otif = (latewd <= 0) && inFull;
           _orders.push({ day: dlKey, pid: c.pid, company: c.company || '', cls: cls, otif: otif, inFull: inFull });
