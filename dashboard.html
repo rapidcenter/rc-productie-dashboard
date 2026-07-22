@@ -3107,8 +3107,18 @@ window.addEventListener('DOMContentLoaded', async function(){
     min-width:108px; text-align:center; padding:0 4px
   }
   .rcd-druktenav.is-shifted .rcd-label { color:#f59e0b }
-  #tab-pps { display:none !important }
   #headerSpark { display:none !important }
+  #tab-pps { padding:4px 2px }
+  .rc-nb { font-family:'Roboto',system-ui,sans-serif; padding:8px 6px; max-width:760px }
+  .rc-nb-intro { font-size:12.5px; color:var(--ink2); line-height:1.5; margin-bottom:14px }
+  .rc-nb-tbl { width:100%; border-collapse:collapse; font-size:12.5px }
+  .rc-nb-tbl th { text-align:left; color:var(--ink3); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; padding:6px 10px; border-bottom:1px solid var(--border) }
+  .rc-nb-tbl td { padding:7px 10px; color:var(--ink); border-bottom:1px solid rgba(255,255,255,.05) }
+  .rc-nb-tbl td:nth-child(2), .rc-nb-tbl th:nth-child(2) { text-align:center }
+  .rc-nb-tbl td:nth-child(3), .rc-nb-tbl th:nth-child(3) { text-align:right; color:var(--ink3) }
+  .rc-nb-def { color:var(--ink4); font-size:10px }
+  .rc-nb-empty { color:var(--ink3); font-style:italic }
+  .rc-nb-note { margin-top:12px; font-size:11px; color:var(--ink3) }
   /* Extra kolom 'Afgesproken levertermijn' tussen Aantal en Verzending (positie 9) */
   .list-cols, .list-group, .list-row { grid-template-columns:200px 234px 140px 140px 70px 100px 360px 60px 180px 180px 1fr !important }
   #listRows .list-group .client.rc-client-link { cursor:pointer }
@@ -4096,6 +4106,57 @@ window.addEventListener('DOMContentLoaded', async function(){
     } catch(e){ console.warn('[RC] bezetting', e); }
   }
 
+  // Productie-drukte: aparte grafiek op de Drukte-tab. Gestapelde staaf per verzenddag met
+  // nabehandel-handelingen (pps-stappen x aantal) per type + een lijn met te-printen stuks (som qty).
+  function rcRenderWerklast(labels, wlTypes, wlPrint){
+    try {
+      if (!window.Chart || !Array.isArray(labels) || !labels.length) return;
+      var oc = document.getElementById('drukteOrders');
+      var ordersBox = (oc && oc.closest) ? oc.closest('.chart-box') : null;
+      var anchor = document.getElementById('rcBezettingBox') || ordersBox;
+      if (!document.getElementById('rcWerklastBox') && anchor && anchor.parentNode){
+        var box = document.createElement('div');
+        box.className = 'chart-box drukte-chart'; box.id = 'rcWerklastBox';
+        box.innerHTML = '<div class="chart-title"><span>Productie-drukte · nabehandelingen</span>'
+          + '<span class="sub">nabehandel-handelingen (stappen × aantal) per verzenddag, per type · lijn = te printen stuks</span></div>'
+          + '<div class="drukte-canvas"><canvas id="rcWerklast"></canvas></div>';
+        anchor.parentNode.insertBefore(box, anchor.nextSibling);
+      }
+      var canvas = document.getElementById('rcWerklast'); if (!canvas) return;
+      var PALETTE = ['#0096D6','#7AB11B','#F59E0B','#A855F7','#EF4444','#14B8A6','#EC4899','#F97316','#22C55E','#64748B'];
+      var types = Object.keys(wlTypes).sort(function(a,b){
+        var sa=0, sb=0; wlTypes[a].forEach(function(v){ sa+=v; }); wlTypes[b].forEach(function(v){ sb+=v; }); return sb - sa;
+      });
+      var datasets = types.map(function(t, i){
+        return { type:'bar', label:t, data:wlTypes[t], stack:'wl', yAxisID:'y',
+          backgroundColor: PALETTE[i % PALETTE.length], borderWidth:0, categoryPercentage:0.7, barPercentage:0.9,
+          datalabels:{ display:false } };
+      });
+      datasets.push({ type:'line', label:'Te printen (stuks)', data:wlPrint, yAxisID:'y1',
+        borderColor:'#CFD2D3', backgroundColor:'rgba(207,210,211,0.08)', borderDash:[5,4], borderWidth:2,
+        pointRadius:2.5, pointHoverRadius:4.5, pointBackgroundColor:'#CFD2D3', fill:false, tension:0.3,
+        datalabels:{ display:false } });
+      if (window.__rcWerklastChart){
+        var ch = window.__rcWerklastChart; ch.data.labels = labels; ch.data.datasets = datasets; ch.update('none'); return;
+      }
+      window.__rcWerklastChart = new window.Chart(canvas, {
+        data: { labels: labels, datasets: datasets },
+        options: {
+          responsive:true, maintainAspectRatio:false, layout:{ padding:{ top:10 } },
+          interaction:{ mode:'index', intersect:false },
+          scales:{
+            x:{ stacked:true, ticks:{ color:'#87898B', font:{ size:10, family:'Roboto' }, maxRotation:45, minRotation:30 }, grid:{ color:'rgba(255,255,255,.04)' } },
+            y:{ stacked:true, beginAtZero:true, ticks:{ color:'#87898B', font:{ size:10, family:'Roboto' } }, grid:{ color:'rgba(255,255,255,.06)' } },
+            y1:{ position:'right', beginAtZero:true, grid:{ drawOnChartArea:false }, ticks:{ color:'#CFD2D3', font:{ size:10, family:'Roboto' } } }
+          },
+          plugins:{
+            legend:{ display:true, position:'top', align:'start', labels:{ color:'#CFD2D3', font:{ size:11, family:'Roboto' }, boxWidth:12, padding:8 } },
+            tooltip:{ backgroundColor:'#001523', titleColor:'#fff', bodyColor:'#CFD2D3', borderColor:'#0096D6', borderWidth:1 }
+          }
+        }
+      });
+    } catch(e){ console.warn('[RC] werklast render', e); }
+  }
   // ===================== OTIF (Leveringsbetrouwbaarheid) =====================
   // Canoniek (RC OTIF-doc): eenheid = per order.
   //  ship-datum = dag van het EERSTE 'Finished [Operator]'-event uit de activity-log
@@ -4588,6 +4649,33 @@ window.addEventListener('DOMContentLoaded', async function(){
       }
     } catch(e){ console.warn('[RC] vandaag-lijn', e); }
     try { rcRenderBezetting((chart.data && chart.data.labels) || [], dayKeys); } catch(e){ console.warn('[RC] bezetting', e); }
+    // Productie-drukte: nabehandel-handelingen (pps-stappen × aantal) per type per verzenddag + te-printen stuks
+    try {
+      var _wlTypes = {}, _wlPrint = dayKeys.map(function(){ return 0; });
+      openParts.forEach(function(p){
+        var pid = p.project; if (!pid || _isFin(pid)) return;
+        var ship = pm[pid]; if (!ship) return;
+        var q = p.qty || 1;
+        var shipIdx = dayKeys.indexOf(dkey(new Date(ship)));
+        if (shipIdx >= 0) _wlPrint[shipIdx] += q;                    // te-printen stuks op de verzenddag
+        var steps = Array.isArray(p.pps) ? p.pps : [];
+        if (!steps.length) return;
+        // Terugrekenen vanaf de deadline: laatste stap op de (naar werkdag gerolde) deadline-dag,
+        // elke stap ervoor z'n doorlooptijd (werkdagen) eerder. 1 stap = 1 werkdag tenzij ingesteld.
+        var cursor = rcRollBackWorkday(new Date(ship));
+        for (var si = steps.length - 1; si >= 0; si--){
+          var name = (steps[si] && String(steps[si]).trim()) || 'Overig';
+          var lead = Math.max(1, rcPpsLead(name));
+          for (var l = 0; l < lead; l++){
+            var idx = dayKeys.indexOf(dkey(cursor));
+            if (idx >= 0) (_wlTypes[name] = _wlTypes[name] || dayKeys.map(function(){ return 0; }))[idx] += q;
+            cursor = rcPrevWorkday(cursor);
+          }
+        }
+      });
+      rcRenderWerklast((chart.data && chart.data.labels) || [], _wlTypes, _wlPrint);
+      try { rcRenderNabehandelTab(); } catch(e){}
+    } catch(e){ console.warn('[RC] werklast data', e); }
     chart.update('none');
     // Groene Finished-lijn ook op de 'Parts per materiaal'-chart (2e as, zelfde data).
     try {
@@ -4683,12 +4771,43 @@ window.addEventListener('DOMContentLoaded', async function(){
     rcUpdateDrukteUI();
   }
 
-  function rcHidePPSTabBtn(){
-    document.querySelectorAll('.tab-btn').forEach(function(b){
-      if ((b.getAttribute('onclick') || '').indexOf("'pps'") >= 0){
-        b.style.display = 'none';
+  // ===== Nabehandel-staptijden (config) =====
+  // Doorlooptijd per nabehandel-stap in WERKDAGEN. Stap niet vermeld = 1 werkdag (default).
+  // De Productie-drukte rekent hiermee terug vanaf de shipping-deadline (laatste stap op de deadline-dag).
+  var RC_PPS_STEPS = {
+    // 'Verven': 1, 'Stralen': 1, 'Monteren': 2, 'Inpakken': 1,   // <-- hier tijden aanpassen
+  };
+  function rcPpsLead(name){ var v = RC_PPS_STEPS[name]; return (v != null && v >= 0) ? v : 1; }
+  function rcPrevWorkday(d){ var x = new Date(d); do { x.setDate(x.getDate()-1); } while (x.getDay()===0 || x.getDay()===6); return x; }
+  function rcRollBackWorkday(d){ var x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); while (x.getDay()===0 || x.getDay()===6) x.setDate(x.getDate()-1); return x; }
+  // Tab 'Nabehandelingen': lijst alle nabehandel-stappen + hun doorlooptijd (referentie/config).
+  function rcRenderNabehandelTab(){
+    try {
+      var host = document.getElementById('tab-pps'); if (!host) return;
+      var counts = {};
+      if (typeof DATA !== 'undefined' && DATA.parts){
+        DATA.parts.forEach(function(p){ (Array.isArray(p.pps)?p.pps:[]).forEach(function(t){ var k=(t&&String(t).trim())||'Overig'; counts[k]=(counts[k]||0)+(p.qty||1); }); });
       }
-    });
+      var names = Object.keys(counts).sort(function(a,b){ return (counts[b]-counts[a]) || a.localeCompare(b,'nl'); });
+      var h = '<div class="rc-nb">';
+      h += '<div class="rc-nb-intro">Nabehandel-stappen en hun <b>doorlooptijd in werkdagen</b>. De Productie-drukte rekent hiermee terug vanaf de shipping-deadline: de laatste stap valt op de deadline-dag, elke stap daarvoor één doorlooptijd eerder. Wil je een tijd aanpassen? Geef het door, dan zet ik het hier.</div>';
+      h += '<table class="rc-nb-tbl"><thead><tr><th>Nabehandel-stap</th><th>Doorlooptijd (werkdagen)</th><th>Handelingen (huidige data)</th></tr></thead><tbody>';
+      if (!names.length){ h += '<tr><td colspan="3" class="rc-nb-empty">Nog geen nabehandel-data geladen…</td></tr>'; }
+      names.forEach(function(n){
+        var custom = (RC_PPS_STEPS[n] != null);
+        h += '<tr><td>'+n+'</td><td>'+rcPpsLead(n)+(custom?'':' <span class="rc-nb-def">default</span>')+'</td><td>'+counts[n]+'</td></tr>';
+      });
+      h += '</tbody></table><div class="rc-nb-note">Aanname: 1 stap = 1 werkdag tenzij hierboven anders ingesteld · laatste stap = deadline-dag.</div></div>';
+      host.innerHTML = h;
+    } catch(e){ console.warn('[RC] nabehandel tab', e); }
+  }
+  function rcInstallNabehandelTab(){
+    try {
+      document.querySelectorAll('.tab-btn').forEach(function(b){
+        if ((b.getAttribute('onclick') || '').indexOf("'pps'") >= 0){ b.textContent = 'Nabehandelingen'; b.style.display = ''; }
+      });
+      rcRenderNabehandelTab();
+    } catch(e){ console.warn('[RC] nabehandel tab install', e); }
   }
 
   // Verberg op de Drukte-tab de charts Volume per materiaal en Parts per PPS-stap.
@@ -5188,7 +5307,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       Object.keys(pm).forEach(function(pid){
         var d = new Date(pm[pid]);
         var mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-        var rev = (ORDER_DETAILS_MAP[pid] && ORDER_DETAILS_MAP[pid].revenue) || 0;
+        var rev = (ORDER_DETAILS_MAP[pid] && ORDER_DETAILS_MAP[pid].revenue) || 0;   // orderbedrag = totalPrice (incl. verzendkosten, excl. btw)
         revByMonth[mk] = (revByMonth[mk] || 0) + rev;
         cntByMonth[mk] = (cntByMonth[mk] || 0) + 1;
       });
@@ -5358,7 +5477,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   window.addEventListener('DOMContentLoaded', () => {
     neutralize();
     setTimeout(setupToolbar, 50);
-    setTimeout(rcHidePPSTabBtn, 80);
+    setTimeout(rcInstallNabehandelTab, 80);
     setTimeout(installHighlightObserver, 200);
     setTimeout(rcInstallDrukteNav, 400);
     setTimeout(rcHideDrukteCharts, 450);
