@@ -5169,6 +5169,41 @@ window.addEventListener('DOMContentLoaded', async function(){
     });
   }
   // Kalender: per cel het aantal open orders (bestaande kleur) + finished (groen).
+  // Tooltip op de maand-titels van de kalender: openstaande omzet (revenue) van open orders
+  // waarvan de (max) shipping-deadline in die maand valt = nog te factureren die maand.
+  function rcFmtEur(n){
+    try { return '€ ' + Math.round(n).toLocaleString('nl-NL'); } catch(e){ return '€ ' + Math.round(n); }
+  }
+  function rcKalenderRevenueTooltip(){
+    try {
+      var card = document.getElementById('kalenderCard');
+      if (!card || typeof getOpenParts !== 'function' || typeof ORDER_DETAILS_MAP === 'undefined') return;
+      var pm = {};
+      getOpenParts().forEach(function(p){
+        var pid = p && p.project; if (!pid || !p.shipping) return;
+        if (!rcPassWsFilter(pid)) return;
+        if (!pm[pid] || p.shipping > pm[pid]) pm[pid] = p.shipping;
+      });
+      var revByMonth = {}, cntByMonth = {};
+      Object.keys(pm).forEach(function(pid){
+        var d = new Date(pm[pid]);
+        var mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+        var rev = (ORDER_DETAILS_MAP[pid] && ORDER_DETAILS_MAP[pid].revenue) || 0;
+        revByMonth[mk] = (revByMonth[mk] || 0) + rev;
+        cntByMonth[mk] = (cntByMonth[mk] || 0) + 1;
+      });
+      var off = (typeof kalMonthOffset !== 'undefined') ? kalMonthOffset : 0;
+      var now = new Date();
+      var labels = card.querySelectorAll('.kal-month-label');
+      Array.prototype.forEach.call(labels, function(lbl, i){
+        var m = new Date(now.getFullYear(), now.getMonth() + off + i, 1);
+        var mk = m.getFullYear() + '-' + String(m.getMonth()+1).padStart(2,'0');
+        var rev = revByMonth[mk] || 0, cnt = cntByMonth[mk] || 0;
+        lbl.style.cursor = 'help';
+        lbl.setAttribute('title', 'Nog te factureren in ' + m.toLocaleDateString('nl-NL',{month:'long',year:'numeric'}) + ': ' + rcFmtEur(rev) + '  (' + cnt + ' open order' + (cnt!==1?'s':'') + ' op shipping-deadline)');
+      });
+    } catch(e){ console.warn('[RC] kalender omzet-tooltip', e); }
+  }
   // Zelfde bucketing als renderKalender (projectMaxShip over open parts).
   function rcRewriteKalenderFinished(){
     try {
@@ -5293,6 +5328,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       window.renderKalender = function(){
         var rk = origRK.apply(this, arguments);
         try { rcRewriteKalenderFinished(); } catch(e){ console.warn('[RC] kalender finished', e); }
+        try { rcKalenderRevenueTooltip(); } catch(e){}
         try { rcHighlightShippingForStatus(); } catch(e){}
         return rk;
       };
@@ -5306,6 +5342,7 @@ window.addEventListener('DOMContentLoaded', async function(){
     try { rcAddAccountBadge(); } catch(e){}
     try { rcMakeClientsClickable(); } catch(e){}
     try { rcRewriteKalenderFinished(); } catch(e){}
+    try { rcKalenderRevenueTooltip(); } catch(e){}
     try { rcHighlightShippingForStatus(); } catch(e){}
   }
 
