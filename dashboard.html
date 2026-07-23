@@ -3043,6 +3043,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   #listRows .order-num.rc-order-link { cursor:pointer }
   #listRows .order-num.rc-order-link:hover { text-decoration:underline; color:var(--rc-blue) }
   .kpi-day-parts .rc-fin-note { font-size:13px; font-weight:700; color:#7AB11B; letter-spacing:0 }
+  .kpi-day-parts .rc-rdy-note { font-size:13px; font-weight:700; color:#38BDF8; letter-spacing:0 }
   .kpi-day .rc-kpi-lt { font-size:9.5px; color:var(--ink3); font-weight:600; margin-top:3px; line-height:1.3; letter-spacing:.02em }
   .kpi-day .rc-kpi-otif { font-size:11px; color:var(--ink3); font-weight:600; margin-top:4px; letter-spacing:.02em }
   .kpi-day .rc-kpi-otif b { font-weight:800; font-variant-numeric:tabular-nums }
@@ -5206,15 +5207,17 @@ window.addEventListener('DOMContentLoaded', async function(){
         var m = (tile.getAttribute('onclick') || '').match(/setKpiFilter\('([^']+)'/);
         if (!m) return;
         var setObj = sets[m[1]]; if (!setObj) return;
-        var pids = Object.keys(setObj); var fin = 0;
-        pids.forEach(function(pid){ if (isFin(pid)) fin++; });
-        var open = pids.length - fin;
+        var pids = Object.keys(setObj); var fin = 0, rdy = 0;
+        function _isRdy(pid){ return /ready for pick/i.test((typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || ''); }
+        pids.forEach(function(pid){ if (_isRdy(pid)) rdy++; else if (isFin(pid)) fin++; });
+        var open = pids.length - fin - rdy;
         var partsEl = tile.querySelector('.kpi-day-parts'); if (!partsEl) return;
         partsEl.innerHTML = nf(open) + ' <span class="unit">orders</span>'
-          + (fin > 0 ? '<span class="rc-fin-note">, ' + nf(fin) + ' Finished</span>' : '');
+          + (fin > 0 ? '<span class="rc-fin-note">, ' + nf(fin) + ' Finished</span>' : '')
+          + (rdy > 0 ? '<span class="rc-rdy-note">, ' + nf(rdy) + ' ready for pickup</span>' : '');
         var _ptm = window.__rcProdTimeByProject || {};
         var _ltc = {};
-        pids.forEach(function(pid){ if (isFin(pid)) return; var cat = rcLtCategory(_ptm[pid]); if (cat) _ltc[cat] = (_ltc[cat] || 0) + 1; });
+        pids.forEach(function(pid){ if (isFin(pid) || _isRdy(pid)) return; var cat = rcLtCategory(_ptm[pid]); if (cat) _ltc[cat] = (_ltc[cat] || 0) + 1; });
         var _LTO = ['Spoed','Snel','Standaard','Economisch','Nader te bepalen'];
         var _cats = Object.keys(_ltc).sort(function(a,b){ var ia=_LTO.indexOf(a),ib=_LTO.indexOf(b); if(ia<0)ia=99; if(ib<0)ib=99; return ia-ib || a.localeCompare(b,'nl'); });
         var _ltEl = tile.querySelector('.rc-kpi-lt');
