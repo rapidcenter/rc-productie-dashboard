@@ -4167,7 +4167,7 @@ window.addEventListener('DOMContentLoaded', async function(){
   //  uitsluiten = huidige orderstatus 'Cancelled' (op statusniveau, niet uit activity),
   //               of geen deadline / geen ship-datum.
   // Draait in de 2e datastroom (fire-and-forget). Bucket per ship-datum -> __rcOtifByDay.
-  var RC_OTIF_FIN_RE = /^Finished [A-Za-z]+$/;
+  var RC_OTIF_FIN_RE = /^Finished [A-Za-z]+$|^Ready for pick-up/;   // 'klaar'-event (v1.5: + Ready for pick-up @)
   var RC_OTIF_PRESHIP_RE = /new order|confirmed|production|on hold|quote|offerte|draft|cancel/i;
   function rcOtifDayKey(d){ d = new Date(d); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   // Werkdagen te laat (canoniek, = wd_late uit build_otif_dashboard.py):
@@ -4402,7 +4402,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       openParts.forEach(function(p){
         var pid = p.project; if (!pid || _ovSeen[pid]) return;
         var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
-        if (/finished|invoice|verzonden|shipped|on shelf|checked/i.test(_st)) return;  // al de deur uit -> niet 'te laat openstaand'
+        if (/finished|invoice|verzonden|shipped|on shelf|checked|ready for pick/i.test(_st)) return;  // al de deur uit / klaar -> niet 'te laat openstaand'
         var sh = pm[pid]; if (!sh) return;
         if (rcWdLate(new Date(sh), _rtNow) >= 0){ _ovSeen[pid] = 1; var _dk = dkey(new Date(sh)); _ovByDay[_dk] = (_ovByDay[_dk] || 0) + 1; }
       });
@@ -5182,7 +5182,7 @@ window.addEventListener('DOMContentLoaded', async function(){
           var pid = p.project; if (!pid || _ovSeen2[pid]) return;
           if (isOrderHidden(pid) || !rcPassWsFilter(pid)) return;
           var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
-          if (/finished|invoice|verzonden|shipped|on shelf|checked/i.test(_st)) return;  // al de deur uit -> niet 'te laat openstaand'
+          if (/finished|invoice|verzonden|shipped|on shelf|checked|ready for pick/i.test(_st)) return;  // al de deur uit / klaar -> niet 'te laat openstaand'
           var ship = pm[pid] || p.shipping; if (!ship) return;
           if (rcWdLate(new Date(ship), _rt2) >= 0){ _ovSeen2[pid] = 1; var _dk2 = localDateKey(new Date(ship)); _ovByDay2[_dk2] = (_ovByDay2[_dk2] || 0) + 1; }
         });
