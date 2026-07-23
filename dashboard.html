@@ -4338,7 +4338,12 @@ window.addEventListener('DOMContentLoaded', async function(){
             var wn = isoW(k);
             var g = wk[wn] || (wk[wn] = { wn: wn, start: i, end: i, n: 0, otif: 0 });
             g.end = i;
-            if (k <= todayKey){ var rc = data[k]; if (rc && rc.n){ g.n += rc.n; g.otif += rc.otif; } }
+            if (k <= todayKey){
+              var rc = data[k];
+              var ov = (window.__rcOtifOverdueByDay || {})[k] || 0;
+              var nn = (rc ? rc.n : 0) + ov;
+              if (nn){ g.n += nn; g.otif += (rc ? rc.otif : 0); }   // overdue telt mee als niet-OTIF, net als de dag-labels
+            }
           });
           Object.keys(wk).forEach(function(key){
             var g = wk[key]; if (!g.n) return;
