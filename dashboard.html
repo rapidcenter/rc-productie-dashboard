@@ -5037,7 +5037,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       parts.forEach(function(p){
         var pid = p && p.project; if (!pid || seen[pid]) return; seen[pid] = 1;
         if (!rcPassCompany(pid)) return;
-        var cat = rcLtCategory(ptm[pid]); if (!cat) return;
+        var cat = rcLtCategory(ptm[pid]) || 'Nader te bepalen';  // lege levertermijn -> Nader te bepalen, zodat totaal aansluit op de statusgroepen
         ltCounts[cat] = (ltCounts[cat] || 0) + 1;
       });
     })();
@@ -5226,7 +5226,7 @@ window.addEventListener('DOMContentLoaded', async function(){
     }
     if (lf && lf.size){
       var ptm = window.__rcProdTimeByProject || {};
-      if (!lf.has(rcLtCategory(ptm[pid] || ''))) return false;
+      if (!lf.has(rcLtCategory(ptm[pid] || '') || 'Nader te bepalen')) return false;
     }
     return true;
   }
@@ -5287,7 +5287,7 @@ window.addEventListener('DOMContentLoaded', async function(){
           + (rdy > 0 ? '<span class="rc-rdy-note">, ' + nf(rdy) + ' ready for pickup</span>' : '');
         var _ptm = window.__rcProdTimeByProject || {};
         var _ltc = {};
-        pids.forEach(function(pid){ if (isFin(pid) || _isRdy(pid)) return; var cat = rcLtCategory(_ptm[pid]); if (cat) _ltc[cat] = (_ltc[cat] || 0) + 1; });
+        pids.forEach(function(pid){ if (isFin(pid) || _isRdy(pid)) return; var cat = rcLtCategory(_ptm[pid]) || 'Nader te bepalen'; _ltc[cat] = (_ltc[cat] || 0) + 1; });
         var _LTO = ['Spoed','Snel','Standaard','Economisch','Nader te bepalen'];
         var _cats = Object.keys(_ltc).sort(function(a,b){ var ia=_LTO.indexOf(a),ib=_LTO.indexOf(b); if(ia<0)ia=99; if(ib<0)ib=99; return ia-ib || a.localeCompare(b,'nl'); });
         var _ltEl = tile.querySelector('.rc-kpi-lt');
