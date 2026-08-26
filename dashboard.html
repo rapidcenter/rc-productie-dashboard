@@ -3524,7 +3524,32 @@ window.addEventListener('DOMContentLoaded', async function(){
           });
           if (rows.length < 200) break;
         }
+        // Levertermijn aanvullen voor OPEN orders die buiten het 30-daagse venster vallen
+        // (paar oude, nog openstaande orders). Per ontbrekende order een smal venster rond
+        // de aanmaakdatum ophalen; zo krijgt elke open order z'n echte levertermijn i.p.v.
+        // onterecht in 'Nader te bepalen' te belanden. Gecapt om hangen te voorkomen.
+        try {
+          var _missLt = (typeof projects !== 'undefined' ? projects : [])
+            .filter(function(p){ return p && p.projectId && p.createdAt && !ptByProject[p.projectId]; });
+          for (var _mi = 0; _mi < _missLt.length && _mi < 40; _mi++){
+            var _mp = _missLt[_mi];
+            if (ptByProject[_mp.projectId]) continue;
+            var _c = new Date(_mp.createdAt);
+            var _mf = '"' + new Date(_c.getTime() - 2 * 86400000).toISOString() + '"';
+            var _mt = '"' + new Date(_c.getTime() + 2 * 86400000).toISOString() + '"';
+            var _mq = 'limit=500&offset=0&sort.direction=desc&sort.by=orderCreatedAt&timezone=2&stateFilters=%7B%7D&search.filter='
+              + '&from.orderCreatedAt=' + encodeURIComponent(_mf) + '&to.orderCreatedAt=' + encodeURIComponent(_mt);
+            try {
+              var _mr = await fetch('/management-service/api/v1/ticket-model/project?' + _mq, { headers: H });
+              if (_mr.ok){
+                var _mj = await _mr.json(); var _mrows = Array.isArray(_mj) ? _mj : (_mj.rows || []);
+                _mrows.forEach(function(r){ if (r.projectId && r.productionTimeName && !ptByProject[r.projectId]) ptByProject[r.projectId] = r.productionTimeName; });
+              }
+            } catch(e){}
+          }
+        } catch(e){ console.warn('[RC] levertermijn aanvullen', e); }
         window.__rcProdTimeByProject = ptByProject;
+        window.__rcProdTimeReady = true;   // levertermijn-map is nu (zo goed als) volledig -> lege = echt 'Nader te bepalen'
         Object.keys(byProject).forEach(function(pid){
           var o = byProject[pid];
           var k = o.maxShip.getFullYear() + '-' + String(o.maxShip.getMonth()+1).padStart(2,'0') + '-' + String(o.maxShip.getDate()).padStart(2,'0');
@@ -5037,7 +5062,11 @@ window.addEventListener('DOMContentLoaded', async function(){
       parts.forEach(function(p){
         var pid = p && p.project; if (!pid || seen[pid]) return; seen[pid] = 1;
         if (!rcPassCompany(pid)) return;
-        var cat = rcLtCategory(ptm[pid]) || 'Nader te bepalen';  // lege levertermijn -> Nader te bepalen, zodat totaal aansluit op de statusgroepen
+        // Lege levertermijn pas ALS 'Nader te bepalen' tellen wanneer de levertermijn-map
+        // volledig geladen is (window.__rcProdTimeReady). Zolang die nog laadt, orders zonder
+        // levertermijn overslaan i.p.v. ze onterecht in 'Nader te bepalen' te dumpen.
+        var cat = rcLtCategory(ptm[pid]) || (window.__rcProdTimeReady ? 'Nader te bepalen' : null);
+        if (!cat) return;
         ltCounts[cat] = (ltCounts[cat] || 0) + 1;
       });
     })();
@@ -5287,7 +5316,7 @@ window.addEventListener('DOMContentLoaded', async function(){
           + (rdy > 0 ? '<span class="rc-rdy-note">, ' + nf(rdy) + ' ready for pickup</span>' : '');
         var _ptm = window.__rcProdTimeByProject || {};
         var _ltc = {};
-        pids.forEach(function(pid){ if (isFin(pid) || _isRdy(pid)) return; var cat = rcLtCategory(_ptm[pid]) || 'Nader te bepalen'; _ltc[cat] = (_ltc[cat] || 0) + 1; });
+        pids.forEach(function(pid){ if (isFin(pid) || _isRdy(pid)) return; var cat = rcLtCategory(_ptm[pid]) || (window.__rcProdTimeReady ? 'Nader te bepalen' : ''); if (cat) _ltc[cat] = (_ltc[cat] || 0) + 1; });
         var _LTO = ['Spoed','Snel','Standaard','Economisch','Nader te bepalen'];
         var _cats = Object.keys(_ltc).sort(function(a,b){ var ia=_LTO.indexOf(a),ib=_LTO.indexOf(b); if(ia<0)ia=99; if(ib<0)ib=99; return ia-ib || a.localeCompare(b,'nl'); });
         var _ltEl = tile.querySelector('.rc-kpi-lt');
