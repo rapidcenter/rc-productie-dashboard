@@ -3380,6 +3380,15 @@ window.addEventListener('DOMContentLoaded', async function(){
       if (!_projectsHaveOpen.has(pid) && _firstPartPerProject[pid]){
         _firstPartPerProject[pid].is_open = true;
         _firstPartPerProject[pid]._is_open_forced = true;
+        // Order is op orderniveau nog open (niet verborgen) maar heeft geen open parts meer
+        // (bijv. alle parts 'Checked & Finished' terwijl orderstatus nog 'Production' is).
+        // Geef de geforceerd-open part alsnog de hoogste part-deadline, zodat de order in de
+        // deadline-weergaven (dag-tegels/kalender/drukte/OTIF) blijft staan i.p.v. te verdwijnen.
+        if (!_firstPartPerProject[pid].shipping && _perOrderShip[pid]){
+          var _fps = new Date(_perOrderShip[pid]);
+          _firstPartPerProject[pid].shipping = _fps;
+          _firstPartPerProject[pid].dagteller = Math.round((startOfDay(_fps) - today) / 86400000);
+        }
       }
     });
 
