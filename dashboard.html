@@ -557,6 +557,7 @@ const STATUS_COLORS = {
   'Ready for pick-up @':'#8C714B',
   'Ready for Shipment':'#B6FF96',
   'Finished FRO':'#4682B4',
+  'Finished BVV':'#4682B4',
   'Finished NvdW':'#4682B4',
   'Finished NST':'#4682B4',
   'Finished GdvW':'#4682B4',
@@ -4447,6 +4448,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       var _rtNow = new Date(), _ovSeen = {}, _ovByDay = {};
       openParts.forEach(function(p){
         var pid = p.project; if (!pid || _ovSeen[pid]) return;
+        if (p._is_open_forced) return;   // parts al afgerond (alleen geforceerd zichtbaar) -> niet als 'te laat openstaand' meetellen in OTIF
         var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
         if (/finished|invoice|verzonden|shipped|on shelf|checked|ready for pick/i.test(_st)) return;  // al de deur uit / klaar -> niet 'te laat openstaand'
         var sh = pm[pid]; if (!sh) return;
@@ -5280,6 +5282,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         var _ovSeen2 = {}, _ovByDay2 = {}, _rt2 = new Date();
         getOpenParts().forEach(function(p){
           var pid = p.project; if (!pid || _ovSeen2[pid]) return;
+          if (p._is_open_forced) return;   // parts al afgerond (alleen geforceerd zichtbaar) -> niet als 'te laat openstaand' meetellen in OTIF
           if (isOrderHidden(pid) || !rcPassWsFilter(pid)) return;
           var _st = (typeof ORDER_STATUS_MAP !== 'undefined' && ORDER_STATUS_MAP[pid]) || '';
           if (/finished|invoice|verzonden|shipped|on shelf|checked|ready for pick/i.test(_st)) return;  // al de deur uit / klaar -> niet 'te laat openstaand'
