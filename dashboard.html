@@ -2421,6 +2421,7 @@ function switchTab(name, btn){
   // Lazy-render: Chart.js charts moeten gerenderd worden NA tab-zichtbaar omdat
   // canvas in een display:none element 0×0 wordt.
   if(name === 'drukte') renderDrukteCharts();
+  if(name === 'machines' && typeof rcRenderMachinesTab === 'function') rcRenderMachinesTab();
 }
 
 // =================== DRUKTE IN PRODUCTIE ===================
@@ -4052,6 +4053,225 @@ window.addEventListener('DOMContentLoaded', async function(){
       rcRenderVerlofTab();
     } catch(e){ console.warn('[RC] verlof tab install', e); }
   }
+
+  // ===================== MACHINES STATUS TAB =====================
+  // Bron: production-service/api/v1/build (print-/buildplanning per machine).
+  // Toont: (1) wat draait nu, (2) bezettingsgraad per machine per dag, (3) builds per status.
+  // Velden die bij RapidCenter leeg blijven (fill rate, materiaalverbruik, z-hoogte) worden bewust niet gebruikt.
+  var RC_BUILDS = [];
+  var RC_MACHINES = [];      // volledige machinelijst (ook idle) uit platform-service/api/v1/machine
+  var RC_MS_HORIZON  = 14;   // aantal kalenderdagen vooruit in de bezettings-heatmap
+  var RC_MS_PASTDAYS = 14;   // terugkijk-venster voor de status-telling
+  function rcMsStyleInject(){
+    if (document.getElementById('rcMsStyle')) return;
+    var s = document.createElement('style'); s.id = 'rcMsStyle';
+    s.textContent = [
+      '#tab-machines{padding:2px}',
+      '.rc-ms-hd{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--rc-blue);border-radius:var(--radius)}',
+      '.rc-ms-title{font-size:20px;font-weight:700;color:var(--ink)}',
+      '.rc-ms-sub{font-size:12px;color:var(--ink3);margin-top:3px;letter-spacing:.02em}',
+      '.rc-ms-meta{font-size:11px;color:var(--ink3);font-variant-numeric:tabular-nums}',
+      '.rc-ms-sect{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:14px}',
+      '.rc-ms-sect-hd{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#59BBE4;margin-bottom:10px}',
+      '.rc-ms-now{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}',
+      '.rc-ms-card{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px}',
+      '.rc-ms-card .m{font-size:13px;font-weight:700;color:var(--ink)}',
+      '.rc-ms-card .b{font-size:11px;color:var(--ink2);margin-top:2px}',
+      '.rc-ms-card .meta{font-size:10.5px;color:var(--ink3);margin-top:5px;font-variant-numeric:tabular-nums}',
+      '.rc-ms-prog{height:6px;background:var(--navy);border:1px solid var(--border2);border-radius:4px;margin-top:7px;overflow:hidden}',
+      '.rc-ms-prog>i{display:block;height:100%;background:var(--rc-blue)}',
+      '.rc-ms-empty{font-size:12px;color:var(--ink3);padding:4px 2px}',
+      '.rc-ms-grid{width:100%;border-collapse:collapse}',
+      '.rc-ms-grid th,.rc-ms-grid td{padding:4px 3px;text-align:center;font-size:10.5px}',
+      '.rc-ms-grid th{color:var(--ink3);font-weight:600;border-bottom:1px solid var(--border2);line-height:1.25}',
+      '.rc-ms-grid td.m,.rc-ms-grid th.m{text-align:left;color:var(--ink);font-weight:600;white-space:nowrap;font-size:11px}',
+      '.rc-ms-mstat{font-size:9.5px;font-weight:600;letter-spacing:.02em;margin-left:15px}',
+      '.rc-ms-cell{border-radius:4px;color:var(--ink);font-weight:700;font-size:10.5px;font-variant-numeric:tabular-nums;padding:6px 2px}',
+      '.rc-ms-today{outline:2px solid var(--rc-blue);outline-offset:-2px}',
+      '.rc-ms-st{display:flex;flex-wrap:wrap;gap:8px}',
+      '.rc-ms-pill{display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 11px;font-size:11px;color:var(--ink2)}',
+      '.rc-ms-pill b{font-size:15px;color:var(--ink);font-weight:800}',
+      '.rc-ms-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}',
+      '.rc-ms-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:9px;font-size:10px;color:var(--ink3)}',
+      '.rc-ms-legend span{display:inline-flex;align-items:center;gap:5px}',
+      '.rc-ms-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}'
+    ].join('');
+    document.head.appendChild(s);
+  }
+  function rcMachineName(b){ return (b && b.machine && b.machine.name) || (b && b.machineGroup && b.machineGroup.name) || '—'; }
+  function rcBuildStatusName(b){ return (b && b.buildStatus && b.buildStatus.name) || (b && b.state) || ''; }
+  // verdeel de duur van een build over de kalenderdagen die hij beslaat -> {dagKey: minuten}
+  function rcBuildMinutesPerDay(b){
+    var res = {};
+    if (!b || !b.scheduleStart || !b.scheduleEnd) return res;
+    var s = new Date(b.scheduleStart), e = new Date(b.scheduleEnd);
+    if (!(e > s)) return res;
+    var cur = new Date(s), guard = 0;
+    while (cur < e && guard++ < 90){
+      var dayStart = startOfDay(cur);
+      var dayEnd = new Date(dayStart); dayEnd.setDate(dayEnd.getDate() + 1);
+      var segEnd = e < dayEnd ? e : dayEnd;
+      var mins = (segEnd - cur) / 60000;
+      if (mins > 0){ var k = localDateKey(dayStart); res[k] = (res[k] || 0) + mins; }
+      cur = dayEnd;
+    }
+    return res;
+  }
+  async function rcLoadBuilds(){
+    try {
+      var t = getToken(); if (!t) return;
+      var H = { Authorization: t, Accept: 'application/json' };
+      var from = '"' + new Date(Date.now() - RC_MS_PASTDAYS * 86400000).toISOString() + '"';
+      var to   = '"' + new Date(Date.now() + (RC_MS_HORIZON + 2) * 86400000).toISOString() + '"';
+      var all = [];
+      for (var off = 0, pg = 0; pg < 25; off += 100, pg++){
+        var q = 'sort.by=build.scheduleStart&sort.direction=asc'
+          + '&from.build.scheduleEnd=' + encodeURIComponent(from)
+          + '&to.build.scheduleStart=' + encodeURIComponent(to)
+          + '&limit=100&offset=' + off;
+        var r = await fetch('/production-service/api/v1/build?' + q, { headers: H });
+        if (!r.ok) break;
+        var d = await r.json();
+        var rows = Array.isArray(d) ? d : (d.rows || []);
+        all = all.concat(rows);
+        if (rows.length < 100) break;
+      }
+      RC_BUILDS = all; window.__rcBuilds = all;
+      // Volledige machinelijst (ook idle machines zonder geplande builds) ophalen
+      try {
+        var mr = await fetch('/platform-service/api/v1/machine?limit=200', { headers: H });
+        if (mr.ok){
+          var ma = await mr.json();
+          RC_MACHINES = (Array.isArray(ma) ? ma : []).filter(function(m){ return m && m.isEnabled; }).map(function(m){ return m.name; });
+          window.__rcMachines = RC_MACHINES;
+        }
+      } catch(e){}
+      rcRenderMachinesTab();
+      if (!window.__rcBuildsTimer) window.__rcBuildsTimer = setInterval(rcLoadBuilds, 300000);  // elke 5 min verversen
+    } catch(e){ console.warn('[RC] builds laden', e); }
+  }
+  function rcRenderMachinesTab(){
+    var host = document.getElementById('tab-machines'); if (!host) return;
+    rcMsStyleInject();
+    var builds = RC_BUILDS || [];
+    var now = new Date(), today = startOfDay(now), todayKey = localDateKey(today);
+    // machinelijst: volledige lijst uit platform-service (ook idle) + eventuele extra uit de builds
+    var machines = [], mseen = {};
+    (RC_MACHINES || []).forEach(function(m){ if (m && !mseen[m]){ mseen[m] = 1; machines.push(m); } });
+    builds.forEach(function(b){ var m = rcMachineName(b); if (m && m !== '—' && !mseen[m]){ mseen[m] = 1; machines.push(m); } });
+    machines.sort(function(a, b){ return a.localeCompare(b, 'nl'); });
+
+    // (1) NU IN PRODUCTIE
+    var nowBuilds = builds.filter(function(b){
+      var st = rcBuildStatusName(b).toLowerCase();
+      if (/cancel|failed/.test(st)) return false;
+      if (!b.scheduleStart || !b.scheduleEnd) return false;
+      var s = new Date(b.scheduleStart), e = new Date(b.scheduleEnd);
+      return s <= now && now < e;
+    }).sort(function(a, b){ return new Date(a.scheduleEnd) - new Date(b.scheduleEnd); });
+    var nowByMachine = {};
+    nowBuilds.forEach(function(b){ var m = rcMachineName(b); if (!nowByMachine[m]){ var s = new Date(b.scheduleStart), e = new Date(b.scheduleEnd); nowByMachine[m] = { prog: Math.max(0, Math.min(100, Math.round((now - s) / (e - s) * 100))), name: b.name }; } });
+    var nowHtml;
+    if (!nowBuilds.length){ nowHtml = '<div class="rc-ms-empty">Op dit moment draait er geen build.</div>'; }
+    else {
+      nowHtml = '<div class="rc-ms-now">' + nowBuilds.map(function(b){
+        var s = new Date(b.scheduleStart), e = new Date(b.scheduleEnd);
+        var prog = Math.max(0, Math.min(100, Math.round((now - s) / (e - s) * 100)));
+        var rem = fmtDur((e - now) / 1000);
+        var mat = (b.material && b.material.name) ? ' · ' + rcEscAttr(b.material.name) : '';
+        return '<div class="rc-ms-card"><div class="m">' + rcEscAttr(rcMachineName(b)) + '</div>'
+          + '<div class="b">' + rcEscAttr(b.name || '') + mat + '</div>'
+          + '<div class="rc-ms-prog"><i style="width:' + prog + '%"></i></div>'
+          + '<div class="meta">' + prog + '% · klaar over ' + rem + ' (' + fmtTime(e) + ')</div></div>';
+      }).join('') + '</div>';
+    }
+
+    // (2) BEZETTING HEATMAP
+    var days = [];
+    for (var i = 0; i < RC_MS_HORIZON; i++){ var d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
+    var dayKeys = days.map(localDateKey);
+    var occ = {}; machines.forEach(function(m){ occ[m] = {}; });
+    builds.forEach(function(b){
+      var st = rcBuildStatusName(b).toLowerCase(); if (/cancel|failed/.test(st)) return;
+      var m = rcMachineName(b); if (!occ[m]) return;
+      var mpd = rcBuildMinutesPerDay(b);
+      Object.keys(mpd).forEach(function(k){ occ[m][k] = (occ[m][k] || 0) + mpd[k]; });
+    });
+    function occColor(pct){
+      if (pct <= 0)  return 'rgba(148,163,184,.10)';
+      if (pct < 35)  return 'rgba(34,197,94,.28)';
+      if (pct < 70)  return 'rgba(34,197,94,.55)';
+      if (pct < 95)  return 'rgba(245,158,11,.60)';
+      return 'rgba(239,68,68,.68)';
+    }
+    var WD = ['zo','ma','di','wo','do','vr','za'];
+    var heatHtml;
+    if (!machines.length){ heatHtml = '<div class="rc-ms-empty">Geen machines met geplande builds in dit venster.</div>'; }
+    else {
+      var head = '<tr><th class="m">Machine</th>' + days.map(function(d, i){
+        var cls = (dayKeys[i] === todayKey) ? ' class="rc-ms-today"' : '';
+        return '<th' + cls + '>' + WD[d.getDay()] + '<br>' + d.getDate() + '/' + (d.getMonth() + 1) + '</th>';
+      }).join('') + '</tr>';
+      var body = machines.map(function(m){
+        var run = nowByMachine[m];
+        var mcell = '<td class="m"><span class="rc-ms-dot" style="background:' + (run ? '#22C55E' : '#64748B') + ';display:inline-block;margin-right:6px;vertical-align:middle"></span>' + rcEscAttr(m)
+          + '<div class="rc-ms-mstat" style="color:' + (run ? '#22C55E' : 'var(--ink4)') + '">' + (run ? 'Printen · ' + run.prog + '%' : 'Idle') + '</div></td>';
+        return '<tr>' + mcell + dayKeys.map(function(k){
+          var mins = (occ[m] && occ[m][k]) || 0;
+          var pct = Math.min(100, Math.round(mins / 1440 * 100));
+          var cls = (k === todayKey) ? 'rc-ms-cell rc-ms-today' : 'rc-ms-cell';
+          return '<td><div class="' + cls + '" style="background:' + occColor(pct) + '">' + (pct > 0 ? pct + '%' : '') + '</div></td>';
+        }).join('') + '</tr>';
+      }).join('');
+      heatHtml = '<table class="rc-ms-grid"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>'
+        + '<div class="rc-ms-legend"><span><i style="background:rgba(34,197,94,.28)"></i>&lt;35%</span>'
+        + '<span><i style="background:rgba(34,197,94,.55)"></i>35-70%</span>'
+        + '<span><i style="background:rgba(245,158,11,.60)"></i>70-95%</span>'
+        + '<span><i style="background:rgba(239,68,68,.68)"></i>&gt;95%</span>'
+        + '<span>% = geplande build-uren t.o.v. 24u/dag</span></div>';
+    }
+
+    // (3) BUILDS PER STATUS (laatste N dagen, op scheduleStart)
+    var since = new Date(today); since.setDate(since.getDate() - RC_MS_PASTDAYS);
+    var stc = {};
+    builds.forEach(function(b){
+      if (!b.scheduleStart) return; var s = new Date(b.scheduleStart);
+      if (s < since || s > now) return;
+      var st = rcBuildStatusName(b) || '—'; stc[st] = (stc[st] || 0) + 1;
+    });
+    var stColors = { 'Printing':'#0096D6', 'Finished':'#22C55E', 'Completed':'#16A34A', 'Cancelled':'#94A3B8', 'Failed':'#EF4444' };
+    var stOrder = ['Printing','Finished','Completed','Cancelled','Failed'];
+    var stKeys = Object.keys(stc).sort(function(a, b){ var ia = stOrder.indexOf(a), ib = stOrder.indexOf(b); if (ia < 0) ia = 9; if (ib < 0) ib = 9; return ia - ib || a.localeCompare(b, 'nl'); });
+    var stHtml = stKeys.length
+      ? '<div class="rc-ms-st">' + stKeys.map(function(k){
+          return '<div class="rc-ms-pill"><span class="rc-ms-dot" style="background:' + (stColors[k] || '#94A3B8') + '"></span><b>' + stc[k] + '</b> ' + rcEscAttr(k) + '</div>';
+        }).join('') + '</div>'
+      : '<div class="rc-ms-empty">Geen builds in de laatste ' + RC_MS_PASTDAYS + ' dagen.</div>';
+
+    host.innerHTML =
+      '<div class="rc-ms-hd"><div><div class="rc-ms-title">Machines status</div>'
+      + '<div class="rc-ms-sub">Live printstatus, planning &amp; bezetting per machine · bron: AMFG build-planning · (aan/uit-verbinding niet via API beschikbaar)</div></div>'
+      + '<div class="rc-ms-meta">Bijgewerkt ' + fmtTime(now) + '</div></div>'
+      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Nu in productie</div>' + nowHtml + '</div>'
+      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Bezetting komende ' + RC_MS_HORIZON + ' dagen</div>' + heatHtml + '</div>'
+      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Builds per status · laatste ' + RC_MS_PASTDAYS + ' dagen</div>' + stHtml + '</div>';
+  }
+  function rcInstallMachinesTab(){
+    try {
+      var nav = document.querySelector('.tabnav');
+      if (nav && !document.getElementById('rcMachinesTabBtn')){
+        var b = document.createElement('button'); b.id = 'rcMachinesTabBtn'; b.className = 'tab-btn';
+        b.textContent = 'Machines status'; b.setAttribute('onclick', "switchTab('machines',this)");
+        nav.appendChild(b);
+      }
+      var main = document.querySelector('main');
+      if (main && !document.getElementById('tab-machines')){
+        var sec = document.createElement('section'); sec.className = 'tab-section'; sec.id = 'tab-machines';
+        main.appendChild(sec);
+      }
+      rcRenderMachinesTab();
+    } catch(e){ console.warn('[RC] machines tab install', e); }
+  }
   // Personele bezetting: per dag TWEE kolommen (ochtend/middag). Groen (aanwezig) onderaan,
   // grijs (vrij) bovenaan. Label bovenin = aantal aanwezig (0,5 per dagdeel, bv. 6.5).
   function rcRenderBezetting(labels, keys){
@@ -5558,6 +5778,8 @@ window.addEventListener('DOMContentLoaded', async function(){
     setTimeout(rcInstallWerkstroom, 500);
     setTimeout(rcInstallVerlofTab, 560);
     setTimeout(rcLoadVerlof, 650);
+    setTimeout(rcInstallMachinesTab, 580);
+    setTimeout(rcLoadBuilds, 750);
     setTimeout(async () => {
       try {
         await loadFromAMFG();
