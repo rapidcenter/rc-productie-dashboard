@@ -4088,6 +4088,8 @@ window.addEventListener('DOMContentLoaded', async function(){
       '.rc-ms-mstat{font-size:9.5px;font-weight:600;letter-spacing:.02em;margin-left:15px}',
       '.rc-ms-cell{border-radius:4px;color:var(--ink);font-weight:700;font-size:10.5px;font-variant-numeric:tabular-nums;padding:6px 2px}',
       '.rc-ms-today{outline:2px solid var(--rc-blue);outline-offset:-2px}',
+      '.rc-ms-pasth{color:var(--ink4);font-weight:500}',
+      '.rc-ms-div{border-left:2px solid var(--rc-blue)}',
       '.rc-ms-st{display:flex;flex-wrap:wrap;gap:8px}',
       '.rc-ms-pill{display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 11px;font-size:11px;color:var(--ink2)}',
       '.rc-ms-pill b{font-size:15px;color:var(--ink);font-weight:800}',
@@ -4186,9 +4188,12 @@ window.addEventListener('DOMContentLoaded', async function(){
       }).join('') + '</div>';
     }
 
-    // (2) BEZETTING HEATMAP
+    // (2) BEZETTING HEATMAP — deze week (vanaf maandag, incl. historie) t/m horizon vooruit
+    var weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));   // maandag van deze week
+    var lastDay = new Date(today); lastDay.setDate(lastDay.getDate() + RC_MS_HORIZON - 1);
     var days = [];
-    for (var i = 0; i < RC_MS_HORIZON; i++){ var d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
+    for (var dd = new Date(weekStart); dd <= lastDay; dd.setDate(dd.getDate() + 1)){ days.push(new Date(dd)); }
     var dayKeys = days.map(localDateKey);
     var occ = {}; machines.forEach(function(m){ occ[m] = {}; });
     builds.forEach(function(b){
@@ -4209,8 +4214,9 @@ window.addEventListener('DOMContentLoaded', async function(){
     if (!machines.length){ heatHtml = '<div class="rc-ms-empty">Geen machines met geplande builds in dit venster.</div>'; }
     else {
       var head = '<tr><th class="m">Machine</th>' + days.map(function(d, i){
-        var cls = (dayKeys[i] === todayKey) ? ' class="rc-ms-today"' : '';
-        return '<th' + cls + '>' + WD[d.getDay()] + '<br>' + d.getDate() + '/' + (d.getMonth() + 1) + '</th>';
+        var k = dayKeys[i], isToday = k === todayKey, isPast = k < todayKey;
+        var cls = isToday ? 'rc-ms-today rc-ms-div' : (isPast ? 'rc-ms-pasth' : '');
+        return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + WD[d.getDay()] + '<br>' + d.getDate() + '/' + (d.getMonth() + 1) + '</th>';
       }).join('') + '</tr>';
       var body = machines.map(function(m){
         var run = nowByMachine[m];
@@ -4219,8 +4225,10 @@ window.addEventListener('DOMContentLoaded', async function(){
         return '<tr>' + mcell + dayKeys.map(function(k){
           var mins = (occ[m] && occ[m][k]) || 0;
           var pct = Math.min(100, Math.round(mins / 1440 * 100));
-          var cls = (k === todayKey) ? 'rc-ms-cell rc-ms-today' : 'rc-ms-cell';
-          return '<td><div class="' + cls + '" style="background:' + occColor(pct) + '">' + (pct > 0 ? pct + '%' : '') + '</div></td>';
+          var isToday = k === todayKey, isPast = k < todayKey;
+          var cls = isToday ? 'rc-ms-cell rc-ms-today' : 'rc-ms-cell';
+          var op = isPast ? ';opacity:.72' : '';
+          return '<td' + (isToday ? ' class="rc-ms-div"' : '') + '><div class="' + cls + '" style="background:' + occColor(pct) + op + '">' + (pct > 0 ? pct + '%' : '') + '</div></td>';
         }).join('') + '</tr>';
       }).join('');
       heatHtml = '<table class="rc-ms-grid"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>'
@@ -4228,7 +4236,8 @@ window.addEventListener('DOMContentLoaded', async function(){
         + '<span><i style="background:rgba(34,197,94,.55)"></i>35-70%</span>'
         + '<span><i style="background:rgba(245,158,11,.60)"></i>70-95%</span>'
         + '<span><i style="background:rgba(239,68,68,.68)"></i>&gt;95%</span>'
-        + '<span>% = geplande build-uren t.o.v. 24u/dag</span></div>';
+        + '<span>vandaag = blauwe lijn · links = historie</span>'
+        + '<span>% = build-uren t.o.v. 24u/dag</span></div>';
     }
 
     // (3) BUILDS PER STATUS (laatste N dagen, op scheduleStart)
@@ -4253,7 +4262,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       + '<div class="rc-ms-sub">Live printstatus, planning &amp; bezetting per machine · bron: AMFG build-planning · (aan/uit-verbinding niet via API beschikbaar)</div></div>'
       + '<div class="rc-ms-meta">Bijgewerkt ' + fmtTime(now) + '</div></div>'
       + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Nu in productie</div>' + nowHtml + '</div>'
-      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Bezetting komende ' + RC_MS_HORIZON + ' dagen</div>' + heatHtml + '</div>'
+      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Bezetting deze week + komende ' + RC_MS_HORIZON + ' dagen</div>' + heatHtml + '</div>'
       + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Builds per status · laatste ' + RC_MS_PASTDAYS + ' dagen</div>' + stHtml + '</div>';
   }
   function rcInstallMachinesTab(){
