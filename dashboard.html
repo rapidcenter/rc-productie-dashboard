@@ -3161,7 +3161,10 @@ window.addEventListener('DOMContentLoaded', async function(){
   .rc-ws .rcw-clear { font-size:10.5px; color:var(--rc-blue); cursor:pointer;
     font-weight:600; text-transform:none; letter-spacing:0 }
   .rc-ws .rcw-clear[hidden] { display:none }
-  .rc-ws .rcw-groups { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1.5fr); gap:14px }
+  .rc-ws .rcw-groups { display:grid; grid-template-columns:minmax(0,0.85fr) minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.25fr); gap:14px }
+  .rc-ws .rcw-mtile { min-width:120px }
+  .rc-ws .rcw-mbar { height:5px; background:var(--navy); border:1px solid var(--border2); border-radius:3px; margin-top:7px; overflow:hidden }
+  .rc-ws .rcw-mbar > i { display:block; height:100%; background:#22C55E }
   .rc-ws .rcw-group { background:var(--surface); border:1px solid var(--border2);
     border-radius:10px; padding:12px 14px }
   .rc-ws .rcw-group-hd { display:flex; align-items:center; justify-content:space-between;
@@ -4149,6 +4152,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         }
       } catch(e){}
       rcRenderMachinesTab();
+      if (typeof rcRenderWerkstroom === 'function') rcRenderWerkstroom();  // machines-cel in de Werkstroom-balk bijwerken
       if (!window.__rcBuildsTimer) window.__rcBuildsTimer = setInterval(rcLoadBuilds, 300000);  // elke 5 min verversen
     } catch(e){ console.warn('[RC] builds laden', e); }
   }
@@ -5338,6 +5342,26 @@ window.addEventListener('DOMContentLoaded', async function(){
       html += '<div class="rcw-tile' + active + '" data-rcw-lt="' + rcEscAttr(c) + '">'
         + '<div class="rcw-cnt">' + ltCounts[c] + '</div><div class="rcw-lbl">orders</div>'
         + '<div class="rcw-st"><span class="rcw-dot" style="background:' + rcLtColor(c) + '"></span>' + c + '</div></div>';
+    });
+    html += '</div></div>';
+    // Vierde groep: Machines — welke machine print nu + hoeveel procent (live uit de buildplanning)
+    var _printing = [];
+    (RC_BUILDS || []).forEach(function(b){
+      var st = (rcBuildStatusName(b) || '').toLowerCase(); if (/cancel|failed/.test(st)) return;
+      if (!b.scheduleStart || !b.scheduleEnd) return;
+      var s = new Date(b.scheduleStart), e = new Date(b.scheduleEnd), _n = new Date();
+      if (!(s <= _n && _n < e)) return;
+      _printing.push({ m: rcMachineName(b), prog: Math.max(0, Math.min(100, Math.round((_n - s) / (e - s) * 100))) });
+    });
+    _printing.sort(function(a, b){ return b.prog - a.prog; });
+    html += '<div class="rcw-group"><div class="rcw-group-hd"><span>Machines &mdash; nu aan het printen</span>'
+      + '<span class="rcw-gtot">' + _printing.length + ' printen</span></div><div class="rcw-tiles">';
+    if (!_printing.length){ html += '<div class="rcw-empty">Geen machine aan het printen</div>'; }
+    _printing.forEach(function(p){
+      html += '<div class="rcw-tile rcw-mtile"><div class="rcw-cnt">' + p.prog + '%</div>'
+        + '<div class="rcw-lbl">gereed</div>'
+        + '<div class="rcw-st"><span class="rcw-dot" style="background:#22C55E"></span>' + rcEscAttr(p.m) + '</div>'
+        + '<div class="rcw-mbar"><i style="width:' + p.prog + '%"></i></div></div>';
     });
     html += '</div></div>';
     html += '</div>';
