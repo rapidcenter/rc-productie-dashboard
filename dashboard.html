@@ -4109,6 +4109,13 @@ window.addEventListener('DOMContentLoaded', async function(){
     document.head.appendChild(s);
   }
   function rcMachineName(b){ return (b && b.machine && b.machine.name) || (b && b.machineGroup && b.machineGroup.name) || '—'; }
+  // Korte machinenaam met het printermodel tussen haakjes, bv. "Beta (JF5620) (AUTO)" -> "Beta (5620)".
+  function rcMachineShort(name){
+    name = String(name || '');
+    var first = name.split(' (')[0].trim();
+    var mdl = (name.match(/JF\s?(\d+)/i) || [])[1];
+    return mdl ? first + ' (' + mdl + ')' : first;
+  }
   function rcBuildStatusName(b){ return (b && b.buildStatus && b.buildStatus.name) || (b && b.state) || ''; }
   // verdeel de duur van een build over de kalenderdagen die hij beslaat -> {dagKey: minuten}
   function rcBuildMinutesPerDay(b){
@@ -4190,7 +4197,7 @@ window.addEventListener('DOMContentLoaded', async function(){
         var prog = Math.max(0, Math.min(100, Math.round((now - s) / (e - s) * 100)));
         var rem = fmtDur((e - now) / 1000);
         var mat = (b.material && b.material.name) ? ' · ' + rcEscAttr(b.material.name) : '';
-        return '<div class="rc-ms-card"><div class="m">' + rcEscAttr(rcMachineName(b)) + '</div>'
+        return '<div class="rc-ms-card"><div class="m">' + rcEscAttr(rcMachineShort(rcMachineName(b))) + '</div>'
           + '<div class="b">' + rcEscAttr(b.name || '') + mat + '</div>'
           + '<div class="rc-ms-prog"><i style="width:' + prog + '%"></i></div>'
           + '<div class="meta">' + prog + '% · klaar over ' + rem + ' (' + fmtTime(e) + ')</div></div>';
@@ -4229,7 +4236,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       }).join('') + '</tr>';
       var body = machines.map(function(m){
         var run = nowByMachine[m];
-        var mcell = '<td class="m"><span class="rc-ms-dot" style="background:' + (run ? '#22C55E' : '#64748B') + ';display:inline-block;margin-right:6px;vertical-align:middle"></span>' + rcEscAttr(m)
+        var mcell = '<td class="m" title="' + rcEscAttr(m) + '"><span class="rc-ms-dot" style="background:' + (run ? '#22C55E' : '#64748B') + ';display:inline-block;margin-right:6px;vertical-align:middle"></span>' + rcEscAttr(rcMachineShort(m))
           + '<div class="rc-ms-mstat" style="color:' + (run ? '#22C55E' : 'var(--ink4)') + '">' + (run ? 'Printen · ' + run.prog + '%' : 'Idle') + '</div></td>';
         return '<tr>' + mcell + dayKeys.map(function(k){
           var mins = (occ[m] && occ[m][k]) || 0;
@@ -5373,7 +5380,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       + '<span class="rcw-gtot">' + _nPrint + ' / ' + _mlist.length + ' printen</span></div><div class="rcw-tiles rcw-mtiles">';
     if (!_mlist.length){ html += '<div class="rcw-empty">Geen machines</div>'; }
     _mlist.forEach(function(m){
-      var pr = _pnow[m], printing = pr != null, shortNm = String(m).split(' (')[0];
+      var pr = _pnow[m], printing = pr != null, shortNm = rcMachineShort(m);
       html += '<div class="rcw-tile rcw-mtile' + (printing ? '' : ' rcw-midle') + '" title="' + rcEscAttr(m) + '">'
         + '<div class="rcw-mname"><span class="rcw-dot" style="background:' + (printing ? '#22C55E' : '#64748B') + '"></span>' + rcEscAttr(shortNm) + '</div>'
         + '<div class="rcw-mpct">' + (printing ? pr + '%' : 'idle') + '</div>'
