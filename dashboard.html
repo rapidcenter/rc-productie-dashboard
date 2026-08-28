@@ -3161,8 +3161,13 @@ window.addEventListener('DOMContentLoaded', async function(){
   .rc-ws .rcw-clear { font-size:10.5px; color:var(--rc-blue); cursor:pointer;
     font-weight:600; text-transform:none; letter-spacing:0 }
   .rc-ws .rcw-clear[hidden] { display:none }
-  .rc-ws .rcw-groups { display:grid; grid-template-columns:minmax(0,0.85fr) minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.25fr); gap:14px }
-  .rc-ws .rcw-mtile { min-width:120px }
+  .rc-ws .rcw-groups { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(0,1.1fr) minmax(0,0.9fr) minmax(0,2.7fr); gap:14px }
+  .rc-ws .rcw-mtiles { flex-wrap:nowrap; gap:6px }
+  .rc-ws .rcw-mtile { min-width:0; flex:1 1 auto; padding:8px 9px }
+  .rc-ws .rcw-mtile .rcw-mname { display:flex; align-items:center; gap:5px; font-size:10.5px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .rc-ws .rcw-mtile .rcw-mpct { font-size:16px; font-weight:800; color:var(--ink); line-height:1; margin-top:5px }
+  .rc-ws .rcw-mtile.rcw-midle { opacity:.7 }
+  .rc-ws .rcw-mtile.rcw-midle .rcw-mpct { font-size:12px; color:var(--ink4); font-weight:600 }
   .rc-ws .rcw-mbar { height:5px; background:var(--navy); border:1px solid var(--border2); border-radius:3px; margin-top:7px; overflow:hidden }
   .rc-ws .rcw-mbar > i { display:block; height:100%; background:#22C55E }
   .rc-ws .rcw-group { background:var(--surface); border:1px solid var(--border2);
@@ -5344,24 +5349,35 @@ window.addEventListener('DOMContentLoaded', async function(){
         + '<div class="rcw-st"><span class="rcw-dot" style="background:' + rcLtColor(c) + '"></span>' + c + '</div></div>';
     });
     html += '</div></div>';
-    // Vierde groep: Machines — welke machine print nu + hoeveel procent (live uit de buildplanning)
-    var _printing = [];
+    // Vierde groep: Machines — status per machine (nu aan het printen + %; idle machines ook tonen)
+    var _pnow = {};
     (RC_BUILDS || []).forEach(function(b){
       var st = (rcBuildStatusName(b) || '').toLowerCase(); if (/cancel|failed/.test(st)) return;
       if (!b.scheduleStart || !b.scheduleEnd) return;
       var s = new Date(b.scheduleStart), e = new Date(b.scheduleEnd), _n = new Date();
       if (!(s <= _n && _n < e)) return;
-      _printing.push({ m: rcMachineName(b), prog: Math.max(0, Math.min(100, Math.round((_n - s) / (e - s) * 100))) });
+      var m = rcMachineName(b), pr = Math.max(0, Math.min(100, Math.round((_n - s) / (e - s) * 100)));
+      if (_pnow[m] == null || pr > _pnow[m]) _pnow[m] = pr;
     });
-    _printing.sort(function(a, b){ return b.prog - a.prog; });
-    html += '<div class="rcw-group"><div class="rcw-group-hd"><span>Machines &mdash; nu aan het printen</span>'
-      + '<span class="rcw-gtot">' + _printing.length + ' printen</span></div><div class="rcw-tiles">';
-    if (!_printing.length){ html += '<div class="rcw-empty">Geen machine aan het printen</div>'; }
-    _printing.forEach(function(p){
-      html += '<div class="rcw-tile rcw-mtile"><div class="rcw-cnt">' + p.prog + '%</div>'
-        + '<div class="rcw-lbl">gereed</div>'
-        + '<div class="rcw-st"><span class="rcw-dot" style="background:#22C55E"></span>' + rcEscAttr(p.m) + '</div>'
-        + '<div class="rcw-mbar"><i style="width:' + p.prog + '%"></i></div></div>';
+    var _mlist = [], _ms = {};
+    (RC_MACHINES || []).forEach(function(m){ if (m && !_ms[m]){ _ms[m] = 1; _mlist.push(m); } });
+    Object.keys(_pnow).forEach(function(m){ if (!_ms[m]){ _ms[m] = 1; _mlist.push(m); } });
+    _mlist.sort(function(a, b){
+      var aP = _pnow[a] != null, bP = _pnow[b] != null;
+      if (aP !== bP) return aP ? -1 : 1;                 // printende machines eerst
+      if (aP) return _pnow[b] - _pnow[a];                 // daarbinnen: hoogste % eerst
+      return a.localeCompare(b, 'nl');
+    });
+    var _nPrint = Object.keys(_pnow).length;
+    html += '<div class="rcw-group"><div class="rcw-group-hd"><span>Machines &mdash; status</span>'
+      + '<span class="rcw-gtot">' + _nPrint + ' / ' + _mlist.length + ' printen</span></div><div class="rcw-tiles rcw-mtiles">';
+    if (!_mlist.length){ html += '<div class="rcw-empty">Geen machines</div>'; }
+    _mlist.forEach(function(m){
+      var pr = _pnow[m], printing = pr != null, shortNm = String(m).split(' (')[0];
+      html += '<div class="rcw-tile rcw-mtile' + (printing ? '' : ' rcw-midle') + '" title="' + rcEscAttr(m) + '">'
+        + '<div class="rcw-mname"><span class="rcw-dot" style="background:' + (printing ? '#22C55E' : '#64748B') + '"></span>' + rcEscAttr(shortNm) + '</div>'
+        + '<div class="rcw-mpct">' + (printing ? pr + '%' : 'idle') + '</div>'
+        + '<div class="rcw-mbar"><i style="width:' + (printing ? pr : 0) + '%"></i></div></div>';
     });
     html += '</div></div>';
     html += '</div>';
