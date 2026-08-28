@@ -3161,9 +3161,9 @@ window.addEventListener('DOMContentLoaded', async function(){
   .rc-ws .rcw-clear { font-size:10.5px; color:var(--rc-blue); cursor:pointer;
     font-weight:600; text-transform:none; letter-spacing:0 }
   .rc-ws .rcw-clear[hidden] { display:none }
-  .rc-ws .rcw-groups { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.7fr) minmax(0,1.4fr) minmax(0,2.3fr); gap:14px }
+  .rc-ws .rcw-groups { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,2.9fr); gap:14px }
   .rc-ws .rcw-tiles.rcw-mtiles { flex-wrap:nowrap; gap:6px }
-  .rc-ws .rcw-tile.rcw-mtile { min-width:0; flex:0 1 74px; padding:8px; text-align:left }
+  .rc-ws .rcw-tile.rcw-mtile { min-width:92px; flex:1 1 auto; padding:8px; text-align:left }
   .rc-ws .rcw-tile.rcw-mtile .rcw-mname { display:flex; align-items:center; gap:4px; font-size:10px; font-weight:700; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
   .rc-ws .rcw-tile.rcw-mtile .rcw-mpct { font-size:15px; font-weight:800; color:var(--ink); line-height:1; margin-top:6px }
   .rc-ws .rcw-tile.rcw-mtile.rcw-midle { opacity:.7 }
@@ -4098,6 +4098,17 @@ window.addEventListener('DOMContentLoaded', async function(){
       '.rc-ms-today{outline:2px solid var(--rc-blue);outline-offset:-2px}',
       '.rc-ms-pasth{color:var(--ink4);font-weight:500}',
       '.rc-ms-div{border-left:2px solid var(--rc-blue)}',
+      '.rc-ms-gantt{width:100%;margin-top:2px}',
+      '.rc-ms-grow{display:flex;align-items:stretch;border-top:1px solid #06263f}',
+      '.rc-ms-glabel{width:112px;flex:0 0 112px;display:flex;align-items:center;color:var(--ink);font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}',
+      '.rc-ms-gtrack{position:relative;flex:1 1 auto;height:30px}',
+      '.rc-ms-gcells{position:absolute;inset:0;display:flex}',
+      '.rc-ms-gcell{flex:1;border-right:1px solid #0A2740}',
+      '.rc-ms-gcell:last-child{border-right:0}',
+      '.rc-ms-gday{flex:1;text-align:center;font-size:10px;padding-bottom:6px}',
+      '.rc-ms-gnow{position:absolute;top:0;bottom:0;width:2px;background:#3FC4FF;z-index:3}',
+      '.rc-ms-gbar{position:absolute;top:5px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:2;box-sizing:border-box}',
+      '.rc-ms-gbar span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;white-space:nowrap;padding:0 3px}',
       '.rc-ms-st{display:flex;flex-wrap:wrap;gap:8px}',
       '.rc-ms-pill{display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 11px;font-size:11px;color:var(--ink2)}',
       '.rc-ms-pill b{font-size:15px;color:var(--ink);font-weight:800}',
@@ -4204,56 +4215,61 @@ window.addEventListener('DOMContentLoaded', async function(){
       }).join('') + '</div>';
     }
 
-    // (2) BEZETTING HEATMAP — deze week (vanaf maandag, incl. historie) t/m horizon vooruit
+    // (2) GANTT — buildplanning per machine (deze week vanaf maandag t/m 10 dagen vooruit).
+    // Elke build = een balk op de tijdlijn met het buildnummer; kleur op status; blauwe lijn = nu.
     var weekStart = new Date(today);
     weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));   // maandag van deze week
-    var lastDay = new Date(today); lastDay.setDate(lastDay.getDate() + RC_MS_HORIZON - 1);
-    var days = [];
-    for (var dd = new Date(weekStart); dd <= lastDay; dd.setDate(dd.getDate() + 1)){ days.push(new Date(dd)); }
-    var dayKeys = days.map(localDateKey);
-    var occ = {}; machines.forEach(function(m){ occ[m] = {}; });
+    var endG = new Date(today); endG.setDate(endG.getDate() + 10);
+    var gdays = [];
+    for (var dd = new Date(weekStart); dd <= endG; dd.setDate(dd.getDate() + 1)){ gdays.push(new Date(dd)); }
+    var tl0 = weekStart.getTime(), gspan = gdays.length * 86400000;
+    function _pl(t){ return Math.max(0, Math.min(100, (t - tl0) / gspan * 100)); }
+    var bByM = {}; machines.forEach(function(m){ bByM[m] = []; });
     builds.forEach(function(b){
       var st = rcBuildStatusName(b).toLowerCase(); if (/cancel|failed/.test(st)) return;
-      var m = rcMachineName(b); if (!occ[m]) return;
-      var mpd = rcBuildMinutesPerDay(b);
-      Object.keys(mpd).forEach(function(k){ occ[m][k] = (occ[m][k] || 0) + mpd[k]; });
+      if (!b.scheduleStart || !b.scheduleEnd) return;
+      var m = rcMachineName(b); if (!bByM[m]) return;
+      var s = new Date(b.scheduleStart).getTime(), e = new Date(b.scheduleEnd).getTime();
+      if (e <= tl0 || s >= tl0 + gspan) return;   // buiten venster
+      bByM[m].push(b);
     });
-    function occColor(pct){
-      if (pct <= 0)  return 'rgba(148,163,184,.10)';
-      if (pct < 35)  return 'rgba(34,197,94,.28)';
-      if (pct < 70)  return 'rgba(34,197,94,.55)';
-      if (pct < 95)  return 'rgba(245,158,11,.60)';
-      return 'rgba(239,68,68,.68)';
-    }
     var WD = ['zo','ma','di','wo','do','vr','za'];
+    var _nowL = _pl(Date.now());
     var heatHtml;
-    if (!machines.length){ heatHtml = '<div class="rc-ms-empty">Geen machines met geplande builds in dit venster.</div>'; }
+    if (!machines.length){ heatHtml = '<div class="rc-ms-empty">Geen machines gevonden.</div>'; }
     else {
-      var head = '<tr><th class="m">Machine</th>' + days.map(function(d, i){
-        var k = dayKeys[i], isToday = k === todayKey, isPast = k < todayKey;
-        var cls = isToday ? 'rc-ms-today rc-ms-div' : (isPast ? 'rc-ms-pasth' : '');
-        return '<th' + (cls ? ' class="' + cls + '"' : '') + '>' + WD[d.getDay()] + '<br>' + d.getDate() + '/' + (d.getMonth() + 1) + '</th>';
-      }).join('') + '</tr>';
-      var body = machines.map(function(m){
-        var run = nowByMachine[m];
-        var mcell = '<td class="m" title="' + rcEscAttr(m) + '"><span class="rc-ms-dot" style="background:' + (run ? '#22C55E' : '#64748B') + ';display:inline-block;margin-right:6px;vertical-align:middle"></span>' + rcEscAttr(rcMachineShort(m))
-          + '<div class="rc-ms-mstat" style="color:' + (run ? '#22C55E' : 'var(--ink4)') + '">' + (run ? 'Printen · ' + run.prog + '%' : 'Idle') + '</div></td>';
-        return '<tr>' + mcell + dayKeys.map(function(k){
-          var mins = (occ[m] && occ[m][k]) || 0;
-          var pct = Math.min(100, Math.round(mins / 1440 * 100));
-          var isToday = k === todayKey, isPast = k < todayKey;
-          var cls = isToday ? 'rc-ms-cell rc-ms-today' : 'rc-ms-cell';
-          var op = isPast ? ';opacity:.72' : '';
-          return '<td' + (isToday ? ' class="rc-ms-div"' : '') + '><div class="' + cls + '" style="background:' + occColor(pct) + op + '">' + (pct > 0 ? pct + '%' : '') + '</div></td>';
-        }).join('') + '</tr>';
+      var gHead = '<div class="rc-ms-grow" style="border-top:0"><div class="rc-ms-glabel"></div>'
+        + '<div class="rc-ms-gtrack" style="height:auto"><div style="display:flex">'
+        + gdays.map(function(d){ var t = localDateKey(d) === todayKey;
+            return '<div class="rc-ms-gday" style="color:' + (t ? '#3FC4FF' : 'var(--ink4)') + '">' + WD[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth() + 1) + '</div>'; }).join('')
+        + '</div></div></div>';
+      var gRows = machines.map(function(m){
+        var cells = gdays.map(function(d){ var t = localDateKey(d) === todayKey; return '<div class="rc-ms-gcell"' + (t ? ' style="background:rgba(63,196,255,.06)"' : '') + '></div>'; }).join('');
+        var bars = (bByM[m] || []).sort(function(a, b){ return new Date(a.scheduleStart) - new Date(b.scheduleStart); }).map(function(b){
+          var s = new Date(b.scheduleStart).getTime(), e = new Date(b.scheduleEnd).getTime();
+          var L = _pl(s), W = Math.max(1.4, _pl(e) - L);
+          var stn = rcBuildStatusName(b).toLowerCase();
+          var printing = /printing/.test(stn), done = /finish|complet/.test(stn);
+          var bg = printing ? '#0096D6' : (done ? '#1D9E75' : 'transparent');
+          var bd = printing ? '#0096D6' : (done ? '#1D9E75' : '#3A8DDE');
+          var tc = printing ? '#E6F1FB' : (done ? '#04231A' : '#9FC6EC');
+          var brd = (!printing && !done) ? 'border:1px dashed ' + bd : 'border:1px solid ' + bd;
+          var hrs = Math.round((e - s) / 3600000);
+          var mat = (b.material && b.material.name) ? ' · ' + b.material.name : '';
+          var tip = rcMachineShort(m) + ' · ' + (b.name || '') + mat + ' · ' + hrs + 'u';
+          return '<div class="rc-ms-gbar" title="' + rcEscAttr(tip) + '" style="left:' + L.toFixed(2) + '%;width:' + W.toFixed(2) + '%;background:' + bg + ';' + brd + '"><span style="color:' + tc + '">' + rcEscAttr(b.name || '') + '</span></div>';
+        }).join('');
+        var nowLine = (_nowL > 0 && _nowL < 100) ? '<div class="rc-ms-gnow" style="left:' + _nowL.toFixed(2) + '%"></div>' : '';
+        return '<div class="rc-ms-grow"><div class="rc-ms-glabel" title="' + rcEscAttr(m) + '">' + rcEscAttr(rcMachineShort(m)) + '</div>'
+          + '<div class="rc-ms-gtrack"><div class="rc-ms-gcells">' + cells + '</div>' + nowLine + bars + '</div></div>';
       }).join('');
-      heatHtml = '<table class="rc-ms-grid"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>'
-        + '<div class="rc-ms-legend"><span><i style="background:rgba(34,197,94,.28)"></i>&lt;35%</span>'
-        + '<span><i style="background:rgba(34,197,94,.55)"></i>35-70%</span>'
-        + '<span><i style="background:rgba(245,158,11,.60)"></i>70-95%</span>'
-        + '<span><i style="background:rgba(239,68,68,.68)"></i>&gt;95%</span>'
-        + '<span>vandaag = blauwe lijn · links = historie</span>'
-        + '<span>% = build-uren t.o.v. 24u/dag</span></div>';
+      heatHtml = '<div class="rc-ms-gantt">' + gHead + gRows + '</div>'
+        + '<div class="rc-ms-legend">'
+        + '<span><i style="background:#1D9E75"></i>afgerond</span>'
+        + '<span><i style="background:#0096D6"></i>nu aan het printen</span>'
+        + '<span><i style="background:transparent;border:1px dashed #3A8DDE"></i>gepland</span>'
+        + '<span><i style="width:2px;background:#3FC4FF"></i>nu</span>'
+        + '<span>balk = 1 build · label = buildnummer · details bij hover</span></div>';
     }
 
     // (3) BUILDS PER STATUS (laatste N dagen, op scheduleStart)
@@ -4278,7 +4294,7 @@ window.addEventListener('DOMContentLoaded', async function(){
       + '<div class="rc-ms-sub">Live printstatus, planning &amp; bezetting per machine · bron: AMFG build-planning · (aan/uit-verbinding niet via API beschikbaar)</div></div>'
       + '<div class="rc-ms-meta">Bijgewerkt ' + fmtTime(now) + '</div></div>'
       + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Nu in productie</div>' + nowHtml + '</div>'
-      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Bezetting deze week + komende ' + RC_MS_HORIZON + ' dagen</div>' + heatHtml + '</div>'
+      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Buildplanning per machine &middot; deze week + 10 dagen</div>' + heatHtml + '</div>'
       + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Builds per status · laatste ' + RC_MS_PASTDAYS + ' dagen</div>' + stHtml + '</div>';
   }
   function rcInstallMachinesTab(){
