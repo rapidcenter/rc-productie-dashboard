@@ -4031,7 +4031,12 @@ window.addEventListener('DOMContentLoaded', async function(){
         html += '<div class="rc-vl-row"><div class="rc-vl-name" title="'+n+'">'+n+'</div><div class="rc-vl-track">'+grid(false)+bars+'</div></div>';
       });
       html += '</div>';
-      html += '<div class="rc-vl-legenda">Verlof uit Nmbrs · lichtere balk = halve dag · rode lijn = vandaag · vaste vrije dagen niet getoond</div>';
+      var _vg = window.__rcVerlofGenerated;
+      var _vgTxt = 'onbekend';
+      if (_vg){ var _gd = new Date(_vg); _vgTxt = isNaN(_gd) ? String(_vg)
+        : _gd.toLocaleDateString('nl-NL', { weekday:'short', day:'numeric', month:'short', year:'numeric' }) + ' om ' + _gd.toLocaleTimeString('nl-NL', { hour:'2-digit', minute:'2-digit' }); }
+      html += '<div class="rc-vl-legenda">Verlof uit Nmbrs · lichtere balk = halve dag · rode lijn = vandaag · vaste vrije dagen niet getoond'
+        + '<br><span style="color:var(--ink2)">Verlofdata bijgewerkt: <strong style="color:var(--ink)">' + _vgTxt + '</strong></span></div>';
       html += '</div>';
       host.innerHTML = html;
       host.querySelectorAll('.rc-vl-btn').forEach(function(btn){
@@ -4100,15 +4105,31 @@ window.addEventListener('DOMContentLoaded', async function(){
       '.rc-ms-div{border-left:2px solid var(--rc-blue)}',
       '.rc-ms-gantt{width:100%;margin-top:2px}',
       '.rc-ms-grow{display:flex;align-items:stretch;border-top:1px solid #06263f}',
-      '.rc-ms-glabel{width:112px;flex:0 0 112px;display:flex;align-items:center;color:var(--ink);font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}',
+      '.rc-ms-glabel{width:150px;flex:0 0 150px;display:flex;align-items:center;color:var(--ink);font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px}',
       '.rc-ms-gtrack{position:relative;flex:1 1 auto;height:30px}',
       '.rc-ms-gcells{position:absolute;inset:0;display:flex}',
       '.rc-ms-gcell{flex:1;border-right:1px solid #0A2740}',
       '.rc-ms-gcell:last-child{border-right:0}',
+      '.rc-ms-wecell{background-image:repeating-linear-gradient(45deg,rgba(148,163,184,.07) 0,rgba(148,163,184,.07) 4px,transparent 4px,transparent 8px)}',
       '.rc-ms-gday{flex:1;text-align:center;font-size:10px;padding-bottom:6px}',
+      '.rc-ms-gday.rc-ms-we{opacity:.65}',
       '.rc-ms-gnow{position:absolute;top:0;bottom:0;width:2px;background:#3FC4FF;z-index:3}',
-      '.rc-ms-gbar{position:absolute;top:5px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:2;box-sizing:border-box}',
-      '.rc-ms-gbar span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;white-space:nowrap;padding:0 3px}',
+      '.rc-ms-gbar{position:absolute;top:5px;height:20px;border-radius:3px;display:flex;align-items:center;overflow:hidden;z-index:2;box-sizing:border-box}',
+      '.rc-ms-gbar span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:#fff;white-space:nowrap;padding:0 5px}',
+      '.rc-ms-gtool{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:12px}',
+      '.rc-ms-tbtn,.rc-ms-vbtn{background:var(--surface2);border:1px solid var(--border2);color:var(--ink2);font-size:11px;font-weight:600;padding:5px 10px;border-radius:6px;cursor:pointer;font-family:inherit}',
+      '.rc-ms-tbtn:hover,.rc-ms-vbtn:hover{border-color:var(--rc-blue);color:var(--ink)}',
+      '.rc-ms-vbtn.on{background:var(--rc-blue);border-color:var(--rc-blue);color:#fff}',
+      '.rc-ms-grange{font-size:11px;color:var(--ink2);font-weight:600;margin:0 8px;font-variant-numeric:tabular-nums}',
+      '.rc-ms-vlabel{font-size:11px;color:var(--ink4);margin-left:auto;margin-right:2px}',
+      '.rc-ms-wkband .rc-ms-wk{text-align:center;font-size:11px;font-weight:700;color:var(--ink2);border-left:1px solid #14384F;padding:5px 0}',
+      '.rc-ms-grouphd{background:rgba(0,150,214,.07);cursor:pointer}',
+      '.rc-ms-grouphd:hover{background:rgba(0,150,214,.12)}',
+      '.rc-ms-glabelgrp{font-weight:700;color:var(--ink);width:100%}',
+      '.rc-ms-grouptrack{height:26px}',
+      '.rc-ms-gtog{display:inline-block;width:14px;color:#59BBE4;font-weight:700}',
+      '.rc-ms-gcount{display:inline-block;margin-left:8px;background:var(--surface3);color:var(--ink2);border-radius:8px;padding:0 7px;font-size:10px;font-weight:700}',
+      '.rc-ms-sdot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:7px;flex:0 0 auto}',
       '.rc-ms-st{display:flex;flex-wrap:wrap;gap:8px}',
       '.rc-ms-pill{display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 11px;font-size:11px;color:var(--ink2)}',
       '.rc-ms-pill b{font-size:15px;color:var(--ink);font-weight:800}',
@@ -4127,6 +4148,19 @@ window.addEventListener('DOMContentLoaded', async function(){
     var mdl = (name.match(/JF\s?(\d+)/i) || [])[1];
     return mdl ? first + ' (' + mdl + ')' : first;
   }
+  // ---- Gantt view-state (AMFG-stijl planner) ----
+  var RC_G_VIEWS = [['Dag',1],['3 dagen',3],['Week',7],['2 weken',14],['3 weken',21]];
+  function rcIsoWeek(d){ var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); var dn = (t.getUTCDay() + 6) % 7; t.setUTCDate(t.getUTCDate() - dn + 3); var f = new Date(Date.UTC(t.getUTCFullYear(), 0, 4)); return 1 + Math.round(((t - f) / 86400000 - 3 + ((f.getUTCDay() + 6) % 7)) / 7); }
+  function rcGWindow(){
+    var days = window.__rcGDays || 7;
+    var anchor = window.__rcGAnchor ? new Date(window.__rcGAnchor) : new Date();
+    anchor = startOfDay(anchor);
+    var start = new Date(anchor);
+    if (days >= 7) start.setDate(start.getDate() - ((start.getDay() + 6) % 7));   // week+ -> maandag
+    var end = new Date(start); end.setDate(end.getDate() + days - 1);
+    return { start: start, end: end, days: days };
+  }
+  function rcFmtDMY(d){ return String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + d.getFullYear(); }
   function rcBuildStatusName(b){ return (b && b.buildStatus && b.buildStatus.name) || (b && b.state) || ''; }
   // verdeel de duur van een build over de kalenderdagen die hij beslaat -> {dagKey: minuten}
   function rcBuildMinutesPerDay(b){
@@ -4149,8 +4183,8 @@ window.addEventListener('DOMContentLoaded', async function(){
     try {
       var t = getToken(); if (!t) return;
       var H = { Authorization: t, Accept: 'application/json' };
-      var from = '"' + new Date(Date.now() - RC_MS_PASTDAYS * 86400000).toISOString() + '"';
-      var to   = '"' + new Date(Date.now() + (RC_MS_HORIZON + 2) * 86400000).toISOString() + '"';
+      var from = '"' + new Date(Date.now() - 21 * 86400000).toISOString() + '"';   // ruim venster: dekt historie + vooruit navigeren in de Gantt
+      var to   = '"' + new Date(Date.now() + 45 * 86400000).toISOString() + '"';
       var all = [];
       for (var off = 0, pg = 0; pg < 25; off += 100, pg++){
         var q = 'sort.by=build.scheduleStart&sort.direction=asc'
@@ -4215,62 +4249,73 @@ window.addEventListener('DOMContentLoaded', async function(){
       }).join('') + '</div>';
     }
 
-    // (2) GANTT — buildplanning per machine (deze week vanaf maandag t/m 10 dagen vooruit).
-    // Elke build = een balk op de tijdlijn met het buildnummer; kleur op status; blauwe lijn = nu.
-    var weekStart = new Date(today);
-    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));   // maandag van deze week
-    var endG = new Date(today); endG.setDate(endG.getDate() + 10);
-    var gdays = [];
-    for (var dd = new Date(weekStart); dd <= endG; dd.setDate(dd.getDate() + 1)){ gdays.push(new Date(dd)); }
-    var tl0 = weekStart.getTime(), gspan = gdays.length * 86400000;
+    // (2) GANTT — buildplanning per machine in AMFG-stijl: machinegroepen, weekbalk,
+    // weekend-arcering, view-schakelaar (Dag/3 dagen/Week/2/3 weken) + Vandaag/navigatie.
+    var gw = rcGWindow();
+    var gStart = gw.start, gDays = gw.days, tl0 = gStart.getTime(), gspan = gDays * 86400000;
     function _pl(t){ return Math.max(0, Math.min(100, (t - tl0) / gspan * 100)); }
+    var gdays = []; for (var gi = 0; gi < gDays; gi++){ var _gd = new Date(gStart); _gd.setDate(_gd.getDate() + gi); gdays.push(_gd); }
     var bByM = {}; machines.forEach(function(m){ bByM[m] = []; });
     builds.forEach(function(b){
       var st = rcBuildStatusName(b).toLowerCase(); if (/cancel|failed/.test(st)) return;
       if (!b.scheduleStart || !b.scheduleEnd) return;
       var m = rcMachineName(b); if (!bByM[m]) return;
       var s = new Date(b.scheduleStart).getTime(), e = new Date(b.scheduleEnd).getTime();
-      if (e <= tl0 || s >= tl0 + gspan) return;   // buiten venster
+      if (e <= tl0 || s >= tl0 + gspan) return;
       bByM[m].push(b);
     });
+    var groups = {}, gorder = [];
+    machines.forEach(function(m){ var md = ((m.match(/JF\s?(\d+)/i) || [])[1]) || '?'; if (!groups[md]){ groups[md] = []; gorder.push(md); } groups[md].push(m); });
+    gorder.sort(function(a, b){ return (+a || 9999) - (+b || 9999); });
+    var collapsed = window.__rcGCollapsed || (window.__rcGCollapsed = {});
     var WD = ['zo','ma','di','wo','do','vr','za'];
     var _nowL = _pl(Date.now());
-    var heatHtml;
-    if (!machines.length){ heatHtml = '<div class="rc-ms-empty">Geen machines gevonden.</div>'; }
-    else {
-      var gHead = '<div class="rc-ms-grow" style="border-top:0"><div class="rc-ms-glabel"></div>'
-        + '<div class="rc-ms-gtrack" style="height:auto"><div style="display:flex">'
-        + gdays.map(function(d){ var t = localDateKey(d) === todayKey;
-            return '<div class="rc-ms-gday" style="color:' + (t ? '#3FC4FF' : 'var(--ink4)') + '">' + WD[d.getDay()] + ' ' + d.getDate() + '/' + (d.getMonth() + 1) + '</div>'; }).join('')
-        + '</div></div></div>';
-      var gRows = machines.map(function(m){
-        var cells = gdays.map(function(d){ var t = localDateKey(d) === todayKey; return '<div class="rc-ms-gcell"' + (t ? ' style="background:rgba(63,196,255,.06)"' : '') + '></div>'; }).join('');
+    function _cells(){ return gdays.map(function(d){ var t = localDateKey(d) === todayKey; var we = (d.getDay() === 0 || d.getDay() === 6); return '<div class="rc-ms-gcell' + (we ? ' rc-ms-wecell' : '') + '"' + (t ? ' style="background:rgba(63,196,255,.06)"' : '') + '></div>'; }).join(''); }
+    var _vb = RC_G_VIEWS.map(function(v){ return '<button class="rc-ms-vbtn' + (gDays === v[1] ? ' on' : '') + '" data-gview="' + v[1] + '">' + v[0] + '</button>'; }).join('');
+    var toolbar = '<div class="rc-ms-gtool">'
+      + '<button class="rc-ms-tbtn" data-gnav="today">Vandaag</button>'
+      + '<button class="rc-ms-tbtn" data-gnav="prev">&#9664;</button>'
+      + '<button class="rc-ms-tbtn" data-gnav="next">&#9654;</button>'
+      + '<span class="rc-ms-grange">' + rcFmtDMY(gStart) + ' – ' + rcFmtDMY(gdays[gdays.length - 1]) + '</span>'
+      + '<span class="rc-ms-vlabel">Weergave</span>' + _vb + '</div>';
+    var _wb = '', _wi = 0;
+    while (_wi < gdays.length){ var _wk = rcIsoWeek(gdays[_wi]), _sp = 1; while (_wi + _sp < gdays.length && rcIsoWeek(gdays[_wi + _sp]) === _wk) _sp++; _wb += '<div class="rc-ms-wk" style="flex:' + _sp + '">Wk ' + _wk + '</div>'; _wi += _sp; }
+    var weekBand = '<div class="rc-ms-grow rc-ms-wkband" style="border-top:0"><div class="rc-ms-glabel"></div><div class="rc-ms-gtrack" style="height:auto"><div style="display:flex">' + _wb + '</div></div></div>';
+    var gHead = '<div class="rc-ms-grow" style="border-top:0"><div class="rc-ms-glabel"></div><div class="rc-ms-gtrack" style="height:auto"><div style="display:flex">'
+      + gdays.map(function(d){ var t = localDateKey(d) === todayKey; var we = (d.getDay() === 0 || d.getDay() === 6); return '<div class="rc-ms-gday' + (we ? ' rc-ms-we' : '') + '" style="color:' + (t ? '#3FC4FF' : 'var(--ink4)') + '">' + WD[d.getDay()] + ' ' + String(d.getDate()).padStart(2,'0') + '-' + String(d.getMonth() + 1).padStart(2,'0') + '</div>'; }).join('')
+      + '</div></div></div>';
+    var gRows = '';
+    gorder.forEach(function(md){
+      var ms = groups[md].slice().sort(function(a, b){ return a.localeCompare(b, 'nl'); });
+      var isColl = !!collapsed[md];
+      gRows += '<div class="rc-ms-grow rc-ms-grouphd" data-ggroup="' + rcEscAttr(md) + '"><div class="rc-ms-glabel rc-ms-glabelgrp"><span class="rc-ms-gtog">' + (isColl ? '+' : '–') + '</span>Multi Jet Fusion (JF' + md + ')<span class="rc-ms-gcount">' + ms.length + '</span></div><div class="rc-ms-gtrack rc-ms-grouptrack"><div class="rc-ms-gcells">' + _cells() + '</div></div></div>';
+      if (isColl) return;
+      ms.forEach(function(m){
+        var run = nowByMachine[m];
         var bars = (bByM[m] || []).sort(function(a, b){ return new Date(a.scheduleStart) - new Date(b.scheduleStart); }).map(function(b){
           var s = new Date(b.scheduleStart).getTime(), e = new Date(b.scheduleEnd).getTime();
-          var L = _pl(s), W = Math.max(1.4, _pl(e) - L);
-          var stn = rcBuildStatusName(b).toLowerCase();
-          var printing = /printing/.test(stn), done = /finish|complet/.test(stn);
-          var bg = printing ? '#0096D6' : (done ? '#1D9E75' : 'transparent');
-          var bd = printing ? '#0096D6' : (done ? '#1D9E75' : '#3A8DDE');
-          var tc = printing ? '#E6F1FB' : (done ? '#04231A' : '#9FC6EC');
-          var brd = (!printing && !done) ? 'border:1px dashed ' + bd : 'border:1px solid ' + bd;
+          var L = _pl(s), W = Math.max(1.6, _pl(e) - L);
+          var printing = /printing/.test(rcBuildStatusName(b).toLowerCase());
+          var bg = printing ? '#0E8FCC' : '#3C9D46', acc = printing ? '#0069A6' : '#2E7D32';
+          var num = (((b.name || '').match(/\d+/g) || []).join('').replace(/^0+/, '')) || (b.name || '');
+          var first = String(m).split(' (')[0];
           var hrs = Math.round((e - s) / 3600000);
           var mat = (b.material && b.material.name) ? ' · ' + b.material.name : '';
-          var tip = rcMachineShort(m) + ' · ' + (b.name || '') + mat + ' · ' + hrs + 'u';
-          return '<div class="rc-ms-gbar" title="' + rcEscAttr(tip) + '" style="left:' + L.toFixed(2) + '%;width:' + W.toFixed(2) + '%;background:' + bg + ';' + brd + '"><span style="color:' + tc + '">' + rcEscAttr(b.name || '') + '</span></div>';
+          var tip = rcMachineShort(m) + ' · build ' + num + mat + ' · ' + hrs + 'u';
+          return '<div class="rc-ms-gbar" title="' + rcEscAttr(tip) + '" style="left:' + L.toFixed(2) + '%;width:' + W.toFixed(2) + '%;background:' + bg + ';border-left:3px solid ' + acc + '"><span>' + rcEscAttr(num + ' - ' + first) + '</span></div>';
         }).join('');
         var nowLine = (_nowL > 0 && _nowL < 100) ? '<div class="rc-ms-gnow" style="left:' + _nowL.toFixed(2) + '%"></div>' : '';
-        return '<div class="rc-ms-grow"><div class="rc-ms-glabel" title="' + rcEscAttr(m) + '">' + rcEscAttr(rcMachineShort(m)) + '</div>'
-          + '<div class="rc-ms-gtrack"><div class="rc-ms-gcells">' + cells + '</div>' + nowLine + bars + '</div></div>';
-      }).join('');
-      heatHtml = '<div class="rc-ms-gantt">' + gHead + gRows + '</div>'
-        + '<div class="rc-ms-legend">'
-        + '<span><i style="background:#1D9E75"></i>afgerond</span>'
-        + '<span><i style="background:#0096D6"></i>nu aan het printen</span>'
-        + '<span><i style="background:transparent;border:1px dashed #3A8DDE"></i>gepland</span>'
-        + '<span><i style="width:2px;background:#3FC4FF"></i>nu</span>'
-        + '<span>balk = 1 build · label = buildnummer · details bij hover</span></div>';
-    }
+        gRows += '<div class="rc-ms-grow"><div class="rc-ms-glabel" title="' + rcEscAttr(m) + '"><span class="rc-ms-sdot" style="background:' + (run ? '#22C55E' : '#64748B') + '"></span>' + rcEscAttr(rcMachineShort(m)) + '</div>'
+          + '<div class="rc-ms-gtrack"><div class="rc-ms-gcells">' + _cells() + '</div>' + nowLine + bars + '</div></div>';
+      });
+    });
+    if (!machines.length) gRows = '<div class="rc-ms-empty">Geen machines gevonden.</div>';
+    var heatHtml = toolbar + '<div class="rc-ms-gantt">' + weekBand + gHead + gRows + '</div>'
+      + '<div class="rc-ms-legend">'
+      + '<span><i style="background:#3C9D46"></i>gepland / afgerond</span>'
+      + '<span><i style="background:#0E8FCC"></i>nu aan het printen</span>'
+      + '<span><i style="width:2px;background:#3FC4FF"></i>nu</span>'
+      + '<span>balk = 1 build · label = buildnr - machine · details bij hover</span></div>';
 
     // (3) BUILDS PER STATUS (laatste N dagen, op scheduleStart)
     var since = new Date(today); since.setDate(since.getDate() - RC_MS_PASTDAYS);
@@ -4294,8 +4339,16 @@ window.addEventListener('DOMContentLoaded', async function(){
       + '<div class="rc-ms-sub">Live printstatus, planning &amp; bezetting per machine · bron: AMFG build-planning · (aan/uit-verbinding niet via API beschikbaar)</div></div>'
       + '<div class="rc-ms-meta">Bijgewerkt ' + fmtTime(now) + '</div></div>'
       + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Nu in productie</div>' + nowHtml + '</div>'
-      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Buildplanning per machine &middot; deze week + 10 dagen</div>' + heatHtml + '</div>'
+      + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Buildplanning per machine</div>' + heatHtml + '</div>'
       + '<div class="rc-ms-sect"><div class="rc-ms-sect-hd">Builds per status · laatste ' + RC_MS_PASTDAYS + ' dagen</div>' + stHtml + '</div>';
+    host.querySelectorAll('[data-gview]').forEach(function(btn){ btn.addEventListener('click', function(){ window.__rcGDays = +btn.getAttribute('data-gview'); rcRenderMachinesTab(); }); });
+    host.querySelectorAll('[data-gnav]').forEach(function(btn){ btn.addEventListener('click', function(){
+      var a = btn.getAttribute('data-gnav'), w = rcGWindow();
+      if (a === 'today'){ window.__rcGAnchor = null; }
+      else { var anc = window.__rcGAnchor ? new Date(window.__rcGAnchor) : new Date(); anc = startOfDay(anc); anc.setDate(anc.getDate() + (a === 'next' ? w.days : -w.days)); window.__rcGAnchor = anc.getTime(); }
+      rcRenderMachinesTab();
+    }); });
+    host.querySelectorAll('[data-ggroup]').forEach(function(el){ el.addEventListener('click', function(){ var g = el.getAttribute('data-ggroup'); window.__rcGCollapsed = window.__rcGCollapsed || {}; window.__rcGCollapsed[g] = !window.__rcGCollapsed[g]; rcRenderMachinesTab(); }); });
   }
   function rcInstallMachinesTab(){
     try {
