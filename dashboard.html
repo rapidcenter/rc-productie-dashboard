@@ -1415,12 +1415,22 @@ function getOpenParts(){
   // Dubbele check: orders.xlsx is leidend. Als project finished/cancelled is in orders.xlsx
   // dan is geen enkele part 'open' meer, ook al staat parts.csv nog op In Production.
   // Uitzondering: orders met TICKET STATUS = 'Finished XXX' (Finished TZO/FRO/etc) zijn
-  // productie-klaar maar nog niet verzonden — die laten we WEL zien in de orderlijst.
+  // productie-klaar maar nog niet verzonden — die laten we ALLEEN VANDAAG nog zien
+  // (kalenderdag, o.b.v. ORDER_DETAILS_MAP.statusUpdatedAt = moment dat de order-status
+  // naar Finished ging). Vanaf gisteren doen ze niet meer mee in productie: overal weg
+  // (orderlijst, dag-KPI-tegels, kalender, Drukte-tab — allemaal op deze functie gebouwd).
+  // Onbekende statusUpdatedAt = fail-safe: gewoon zichtbaar laten (afgesproken met Floris).
+  const _todayStart = startOfDay(new Date());
   return DATA.parts.filter(p => {
     if(isOrderHidden(p.project)) return false;
     if(p.is_open) return true;
     const ordStatus = ORDER_STATUS_MAP[p.project] || '';
-    if(/^Finished\b/i.test(ordStatus)) return true;   // Finished TZO/FRO/NvdW/etc
+    if(/^Finished\b/i.test(ordStatus)){   // Finished TZO/FRO/NvdW/etc
+      const _det = ORDER_DETAILS_MAP[p.project];
+      const _su = _det && _det.statusUpdatedAt;
+      if(!_su) return true;               // fail-safe: onbekend -> zichtbaar laten
+      return startOfDay(_su).getTime() === _todayStart.getTime();
+    }
     return false;
   });
 }
