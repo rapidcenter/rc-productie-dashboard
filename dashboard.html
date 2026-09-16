@@ -3397,6 +3397,16 @@ window.addEventListener('DOMContentLoaded', async function(){
     parts.forEach(p => { if (!_firstPartPerProject[p.project]) _firstPartPerProject[p.project] = p; });
     Object.keys(orderStatus).forEach(pid => {
       if (_HIDE_FROM_ORDERLIST.has(orderStatus[pid])) return;
+      const _stForce = orderStatus[pid] || '';
+      if (/^Finished\b/i.test(_stForce)){
+        // Finished XXX-orders: NIET hier onvoorwaardelijk forceren (dat overrulede
+        // de datum-regel hieronder/in getOpenParts()). Alleen forceren (= vandaag nog
+        // zichtbaar) als de order-status vandaag naar Finished ging; anders skippen,
+        // zodat de order overal verdwijnt. Onbekende statusUpdatedAt = fail-safe: wel
+        // forceren.
+        const _suForce = orderDetails[pid] && orderDetails[pid].statusUpdatedAt;
+        if (_suForce && startOfDay(_suForce).getTime() !== today.getTime()) return;
+      }
       if (!_projectsHaveOpen.has(pid) && _firstPartPerProject[pid]){
         _firstPartPerProject[pid].is_open = true;
         _firstPartPerProject[pid]._is_open_forced = true;
